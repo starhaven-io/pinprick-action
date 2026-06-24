@@ -1,0 +1,60 @@
+name: pinprick-action
+description: Audit your GitHub Actions supply chain security with pinprick
+
+branding:
+  icon: star
+  color: purple
+
+inputs:
+  version:
+    description: pinprick version to install. Defaults to "0.17.0", the version this action release pins, so pinned runs stay deterministic. Use "latest" for the newest release, or an exact version like "v0.17.0".
+    required: false
+    default: "0.17.0"
+  path:
+    description: Repository path to scan.
+    required: false
+    default: "."
+  advanced-security:
+    description: Upload SARIF results to GitHub code scanning.
+    required: false
+    default: "true"
+  fail-on-findings:
+    description: Fail the workflow when pinprick reports findings.
+    required: false
+    default: "false"
+
+outputs:
+  sarif-file:
+    description: Filepath to pinprick SARIF results when advanced-security is enabled.
+    value: ${{ steps.run-pinprick.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run pinprick
+      id: run-pinprick
+      run: |
+        "${GITHUB_ACTION_PATH}/action.sh"
+      env:
+        # PPA_* carry this wrapper's inputs, namespaced to avoid clashing with
+        # pinprick's own environment variables.
+        PPA_VERSION: ${{ inputs.version }}
+        PPA_PATH: ${{ inputs.path }}
+        PPA_ADVANCED_SECURITY: ${{ inputs.advanced-security }}
+        PPA_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        GITHUB_TOKEN: ${{ github.token }}
+      shell: bash
+
+    - name: Upload SARIF file to GitHub code scanning
+      if: ${{ inputs.advanced-security == 'true' }}
+      uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+      with:
+        sarif_file: ${{ steps.run-pinprick.outputs.sarif-file }}
+        category: pinprick
+
+    - name: Fail on pinprick findings
+      if: ${{ inputs.fail-on-findings == 'true' && steps.run-pinprick.outputs.exit-code == '1' }}
+      run: |
+        echo "::error::pinprick audit found workflow security findings"
+        exit 1
+      shell: bash

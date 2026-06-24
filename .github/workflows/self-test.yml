@@ -1,0 +1,94 @@
+name: Self-test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: "self-test-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate wrapper
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate action metadata
+        run: ruby -e 'require "yaml"; YAML.load_file("action.yml"); puts "action.yml OK"'
+
+      - name: Check shell syntax
+        run: bash -n action.sh
+
+      - name: ShellCheck
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck action.sh
+          else
+            echo "::warning::shellcheck is not installed on this runner"
+          fi
+
+  console:
+    name: Console mode
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+  sarif:
+    name: SARIF mode
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write # advanced-security uploads pinprick SARIF to code scanning
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        uses: ./
+        with:
+          advanced-security: true
+          fail-on-findings: false
+          path: .
+
+  conclusion:
+    name: conclusion
+    needs: [validate, console, sarif]
+    runs-on: ubuntu-slim
+    if: always()
+    steps:
+      - name: Result
+        env:
+          VALIDATE: ${{ needs.validate.result }}
+          CONSOLE: ${{ needs.console.result }}
+          SARIF: ${{ needs.sarif.result }}
+        run: |
+          test "${VALIDATE}" = "success"
+          test "${CONSOLE}" = "success"
+          [[ "${SARIF}" == "success" || "${SARIF}" == "skipped" ]]
