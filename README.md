@@ -46,7 +46,7 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@<commit-sha> # v0.1.0
+        uses: starhaven-io/pinprick-action@d52684fdf26c13aec4a37eb09029af8fd41b6f01 # v0.1.0
 ```
 
 ### Usage without GitHub Advanced Security
@@ -79,19 +79,20 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@<commit-sha> # v0.1.0
+        uses: starhaven-io/pinprick-action@d52684fdf26c13aec4a37eb09029af8fd41b6f01 # v0.1.0
         with:
           advanced-security: false
 ```
 
-Replace `<commit-sha>` with the full commit SHA for the release you intend to
-use. The version comment records the corresponding release tag for humans.
+Each example pins pinprick-action to a full commit SHA with the release tag in a
+trailing comment, not a mutable tag. That is exactly the pinning pinprick itself
+checks for; bump the SHA when you adopt a newer release.
 
 ### Fail on findings
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@<commit-sha> # v0.1.0
+  uses: starhaven-io/pinprick-action@d52684fdf26c13aec4a37eb09029af8fd41b6f01 # v0.1.0
   with:
     fail-on-findings: true
 ```
