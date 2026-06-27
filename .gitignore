@@ -1,0 +1,5 @@
+# Local machine/editor/agent state
+.claude/
+.codex/
+.DS_Store
+.vscode/
