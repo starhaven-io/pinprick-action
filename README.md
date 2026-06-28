@@ -101,7 +101,7 @@ checks for; bump the SHA when you adopt a newer release.
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `version` | `0.18.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.18.0`. |
+| `version` | `0.19.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.19.0`. |
 | `path` | `.` | Repository path to scan. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
