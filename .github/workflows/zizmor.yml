@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/**"
       - "action.yml"
+  schedule:
+    - cron: "30 13 * * 1" # every Monday at 13:30 UTC
+  workflow_dispatch:
 
 concurrency:
   group: "zizmor-${{ github.ref }}"
@@ -18,6 +21,7 @@ jobs:
   zizmor:
     name: Analyze
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write # required to upload SARIF results

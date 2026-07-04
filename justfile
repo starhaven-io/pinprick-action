@@ -19,7 +19,7 @@ check:
     }
     run diff git diff --check
     if command -v zizmor &>/dev/null; then
-        run audit zizmor --persona auditor .github/workflows/
+        run audit zizmor --persona auditor .
     else
         skip audit zizmor zizmor
     fi
@@ -45,7 +45,7 @@ check:
 
 # Audit GitHub Actions workflows
 audit:
-    zizmor --persona auditor .github/workflows/
+    zizmor --persona auditor .
 
 # Audit the action supply chain for runtime fetches
 pinprick-audit:
