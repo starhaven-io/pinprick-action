@@ -28,10 +28,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Validate action metadata
         run: ruby -e 'require "yaml"; YAML.load_file("action.yml"); puts "action.yml OK"'
+
+      - name: Validate README version and pins
+        run: |
+          ruby - <<'RUBY'
+          require "open3"
+          require "yaml"
+
+          action = YAML.load_file("action.yml")
+          default_version = action.fetch("inputs").fetch("version").fetch("default")
+          readme = File.read("README.md", encoding: "UTF-8")
+
+          version_row = /^\|\s*`version`\s*\|\s*`#{Regexp.escape(default_version)}`\s*\|/
+          abort("README inputs table does not match action.yml version default #{default_version}") unless readme.match?(version_row)
+
+          pins = readme.scan(%r{uses:\s+starhaven-io/pinprick-action@([0-9a-f]{40})\s+#\s+(v[0-9]+\.[0-9]+\.[0-9]+)})
+          abort("README does not contain pinned pinprick-action examples") if pins.empty?
+
+          pins.each do |sha, tag|
+            resolved, status = Open3.capture2("git", "rev-parse", "#{tag}^{}")
+            abort("could not resolve README tag #{tag}") unless status.success?
+
+            resolved = resolved.strip
+            next if resolved == sha
+
+            abort("README pin mismatch for #{tag}: #{sha} != #{resolved}")
+          end
+
+          puts "README version and pins OK"
+          RUBY
 
       - name: Check shell syntax
         run: bash -n action.sh
@@ -57,11 +87,121 @@ jobs:
           persist-credentials: false
 
       - name: Run local pinprick action
+        id: run_pinprick
         uses: ./
         with:
           advanced-security: false
           fail-on-findings: false
           path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
+  console_macos:
+    name: Console mode (macOS)
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        id: run_pinprick
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
+  contract:
+    name: Exit-code contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create findings fixture
+        id: fixture
+        run: |
+          fixture="${RUNNER_TEMP}/pinprick-findings"
+          workflow="${fixture}/.github/workflows/runtime-fetch.yml"
+          mkdir -p "$(dirname "${workflow}")"
+
+          fetch_tool="cur""l"
+          pipe="|"
+          {
+            printf '%s\n' \
+              "name: Runtime fetch fixture" \
+              "on: pull_request" \
+              "jobs:" \
+              "  runtime-fetch:" \
+              "    runs-on: ubuntu-24.04" \
+              "    steps:"
+            printf '      - run: %s -fsSL https://example.com/install.sh %s bash\n' "${fetch_tool}" "${pipe}"
+          } > "${workflow}"
+
+          printf 'path=%s\n' "${fixture}" >> "${GITHUB_OUTPUT}"
+
+      - name: Findings succeed by default
+        id: findings_default
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: ${{ steps.fixture.outputs.path }}
+
+      - name: Assert findings default behavior
+        env:
+          OUTCOME: ${{ steps.findings_default.outcome }}
+          EXIT_CODE: ${{ steps.findings_default.outputs['exit-code'] }}
+        run: |
+          test "${OUTCOME}" = "success"
+          test "${EXIT_CODE}" = "1"
+
+      - name: Findings fail when requested
+        id: findings_fail
+        continue-on-error: true
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: true
+          path: ${{ steps.fixture.outputs.path }}
+
+      - name: Assert fail-on-findings behavior
+        env:
+          OUTCOME: ${{ steps.findings_fail.outcome }}
+        run: test "${OUTCOME}" = "failure"
+
+      - name: Invalid version fails
+        id: invalid_version
+        continue-on-error: true
+        uses: ./
+        with:
+          version: invalid
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert invalid version behavior
+        env:
+          OUTCOME: ${{ steps.invalid_version.outcome }}
+        run: test "${OUTCOME}" = "failure"
 
   sarif:
     name: SARIF mode
@@ -86,7 +226,7 @@ jobs:
 
   conclusion:
     name: conclusion
-    needs: [validate, console, sarif]
+    needs: [validate, console, console_macos, contract, sarif]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     if: always()
@@ -95,8 +235,12 @@ jobs:
         env:
           VALIDATE: ${{ needs.validate.result }}
           CONSOLE: ${{ needs.console.result }}
+          CONSOLE_MACOS: ${{ needs.console_macos.result }}
+          CONTRACT: ${{ needs.contract.result }}
           SARIF: ${{ needs.sarif.result }}
         run: |
           test "${VALIDATE}" = "success"
           test "${CONSOLE}" = "success"
+          test "${CONSOLE_MACOS}" = "success"
+          test "${CONTRACT}" = "success"
           [[ "${SARIF}" == "success" || "${SARIF}" == "skipped" ]]

@@ -24,6 +24,9 @@ inputs:
     default: "false"
 
 outputs:
+  exit-code:
+    description: pinprick audit exit code.
+    value: ${{ steps.run-pinprick.outputs.exit-code }}
   sarif-file:
     description: Filepath to pinprick SARIF results when advanced-security is enabled.
     value: ${{ steps.run-pinprick.outputs.sarif-file }}
