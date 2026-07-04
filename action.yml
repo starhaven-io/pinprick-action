@@ -7,9 +7,9 @@ branding:
 
 inputs:
   version:
-    description: pinprick version to install. Defaults to "0.19.0", the version this action release pins, so pinned runs stay deterministic. Use "latest" for the newest release, or an exact version like "v0.19.0".
+    description: pinprick version to install. Defaults to "0.20.0", the version this action release pins, so pinned runs stay deterministic. Use "latest" for the newest release, or an exact version like "v0.20.0".
     required: false
-    default: "0.19.0"
+    default: "0.20.0"
   path:
     description: Repository path to scan.
     required: false
