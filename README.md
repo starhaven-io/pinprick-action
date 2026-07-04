@@ -6,6 +6,10 @@ pinprick audits GitHub Actions supply chain security by finding runtime fetch
 patterns that bypass pinning, checking action references, and reporting results
 through an explainable, open scoring rubric.
 
+This wrapper installs pinprick from GitHub releases, verifies the downloaded
+archive's sha256 digest, and verifies GitHub provenance attestations before
+extracting attested release assets.
+
 ## Quickstart
 
 ### Usage with GitHub Advanced Security

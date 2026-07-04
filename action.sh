@@ -156,6 +156,62 @@ sha256_file() {
     die "Cannot verify pinprick archive without sha256sum or shasum"
 }
 
+version_requires_attestation() {
+    local version="${1}"
+
+    # pinprick release assets have published provenance attestations since v0.7.0.
+    if [[ "${version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        local major="${BASH_REMATCH[1]}"
+        local minor="${BASH_REMATCH[2]}"
+
+        (( major > 0 || minor >= 7 ))
+        return
+    fi
+
+    return 0
+}
+
+verify_attestation() {
+    local archive="${1}"
+    local version="${2}"
+
+    if ! version_requires_attestation "${version}"; then
+        note warning "pinprick ${version} predates release attestations; skipping provenance verification"
+        return
+    fi
+
+    if ! have gh; then
+        note warning "gh is not installed; skipping pinprick archive provenance verification"
+        return
+    fi
+
+    if ! gh attestation verify --help >/dev/null 2>&1; then
+        note warning "installed gh does not support attestation verification; skipping pinprick archive provenance verification"
+        return
+    fi
+
+    if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
+        note warning "no GitHub token available; skipping pinprick archive provenance verification"
+        return
+    fi
+
+    note debug "verifying pinprick archive provenance attestation"
+    # Retry to ride out transient attestation-API errors; a real verification
+    # failure (missing or mismatched attestation) fails every attempt and dies.
+    local attempt
+    for attempt in 1 2 3; do
+        if gh attestation verify "${archive}" --repo starhaven-io/pinprick; then
+            note debug "pinprick archive provenance attestation verified"
+            return
+        fi
+        if (( attempt < 3 )); then
+            note debug "attestation verification attempt ${attempt} failed; retrying"
+            sleep "${attempt}"
+        fi
+    done
+    die "pinprick archive provenance attestation verification failed"
+}
+
 install_pinprick() {
     local version="${1}"
     local target="${2}"
@@ -193,6 +249,10 @@ install_pinprick() {
     if [[ "${actual_sha}" != "${expected_sha}" ]]; then
         die "Downloaded pinprick archive checksum mismatch"
     fi
+
+    # Keep stdout clean: install_pinprick's stdout is captured as the binary
+    # path, so route verification progress to stderr.
+    verify_attestation "${archive}" "${resolved_version}" >&2
 
     tar -xzf "${archive}" -C "${install_dir}"
     chmod +x "${install_dir}/pinprick"
