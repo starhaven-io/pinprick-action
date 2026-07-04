@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/**"
       - "action.yml"
+  schedule:
+    - cron: "0 13 * * 1" # every Monday at 13:00 UTC
+  workflow_dispatch:
 
 concurrency:
   group: "codeql-${{ github.ref }}"
@@ -22,6 +25,7 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write # required to upload SARIF results

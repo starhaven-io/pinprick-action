@@ -11,12 +11,17 @@ concurrency:
   group: "self-test-${{ github.ref }}"
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
 permissions: {}
 
 jobs:
   validate:
     name: Validate wrapper
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -33,15 +38,16 @@ jobs:
 
       - name: ShellCheck
         run: |
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck action.sh
-          else
-            echo "::warning::shellcheck is not installed on this runner"
-          fi
+          command -v shellcheck >/dev/null 2>&1 || {
+            echo "::error::shellcheck is not installed on this runner"
+            exit 1
+          }
+          shellcheck action.sh
 
   console:
     name: Console mode
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -61,6 +67,7 @@ jobs:
     name: SARIF mode
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write # advanced-security uploads pinprick SARIF to code scanning
@@ -81,6 +88,7 @@ jobs:
     name: conclusion
     needs: [validate, console, sarif]
     runs-on: ubuntu-slim
+    timeout-minutes: 5
     if: always()
     steps:
       - name: Result
