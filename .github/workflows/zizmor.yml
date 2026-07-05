@@ -6,6 +6,10 @@ on:
       - main
     paths:
       - ".github/workflows/**"
+      - "action.yml"
+  schedule:
+    - cron: "30 13 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: "zizmor-${{ github.ref }}"
@@ -19,4 +23,6 @@ jobs:
     permissions:
       contents: read
       security-events: write # required to upload SARIF results
-    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@7ffa044d5dadee7a17c504bd18bedc48057bf224 # v2026.07.05.2
+    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@9943faf3525e743abc7d5c659784ab3093c507c3 # v2026.07.05.3
+    with:
+      timeout-minutes: 10
