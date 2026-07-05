@@ -17,6 +17,10 @@ params:
     runner: "ubuntu-slim"
     timeout-minutes: 10
     schedule: "0 13 * * 1"
+  zizmor:
+    push-paths: ["action.yml"]
+    schedule: "30 13 * * 1"
+    timeout-minutes: 10
   readme:
     license:
       text: |-
