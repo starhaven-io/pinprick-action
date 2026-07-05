@@ -1,0 +1,30 @@
+schema: 1
+license: "mit"
+params:
+  dependabot:
+    - package-ecosystem: "github-actions"
+      group: "github-actions"
+      directory: "/"
+  link-check:
+    targets: "--config lychee.toml README.md"
+    build-site: false
+    authenticated-github: true
+    schedule: "0 14 * * 1"
+    concurrency-group: "link-check"
+  codeql:
+    languages: ["actions"]
+    paths: [".github/workflows/**", "action.yml"]
+    runner: "ubuntu-slim"
+    timeout-minutes: 10
+    schedule: "0 13 * * 1"
+  readme:
+    license:
+      text: |-
+        This action wrapper is licensed under the MIT License. See [LICENSE](LICENSE).
+
+        The pinprick engine downloaded and run by this action is a separate project
+        licensed under the [GNU Affero General Public License v3.0 only](https://github.com/starhaven-io/pinprick/blob/main/LICENSE).
+        Using this wrapper does not relicense pinprick or change pinprick's license
+        terms.
+exceptions:
+  pinprick-audit: "self-test: the action validates pinprick behavior through its dedicated workflow"

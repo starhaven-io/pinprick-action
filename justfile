@@ -43,13 +43,15 @@ check:
     fi
     exit "$failed"
 
-# Audit GitHub Actions workflows
+# fleet:block audit
 audit:
-    zizmor --persona auditor .
+    zizmor --persona auditor .github/workflows/
+# fleet:end
 
-# Audit the action supply chain for runtime fetches
+# fleet:block pinprick-audit
 pinprick-audit:
     pinprick audit .
+# fleet:end
 
 # Check README links
 lychee:
@@ -57,6 +59,8 @@ lychee:
 
 # Setup
 
-# Install git hooks (DCO sign-off + pre-push checks) — run once per clone
+# fleet:block install-hooks
+# Install git hooks (DCO sign-off + pre-push checks). Run once per clone.
 install-hooks:
     git config core.hooksPath .githooks
+# fleet:end

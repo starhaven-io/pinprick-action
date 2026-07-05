@@ -6,10 +6,6 @@ on:
       - main
     paths:
       - ".github/workflows/**"
-      - "action.yml"
-  schedule:
-    - cron: "30 13 * * 1" # every Monday at 13:30 UTC
-  workflow_dispatch:
 
 concurrency:
   group: "zizmor-${{ github.ref }}"
@@ -20,15 +16,7 @@ permissions: {}
 jobs:
   zizmor:
     name: Analyze
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write # required to upload SARIF results
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
-        with:
-          persona: auditor
+    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@5d7a05a8780166410c5447ebd48e1eb84f89b8b3 # v2026.07.05.1

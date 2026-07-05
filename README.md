@@ -156,6 +156,8 @@ pinprick build on every run. To move to a newer pinprick, bump the action to a
 release whose default targets it, or set `version` yourself (including
 `latest`, if you accept non-deterministic installs).
 
+<!-- fleet:block license-section -->
+
 ## License
 
 This action wrapper is licensed under the MIT License. See [LICENSE](LICENSE).
@@ -164,6 +166,8 @@ The pinprick engine downloaded and run by this action is a separate project
 licensed under the [GNU Affero General Public License v3.0 only](https://github.com/starhaven-io/pinprick/blob/main/LICENSE).
 Using this wrapper does not relicense pinprick or change pinprick's license
 terms.
+
+<!-- fleet:end -->
 
 ## Acknowledgements
 
