@@ -46,7 +46,7 @@ runs:
         PPA_ADVANCED_SECURITY: ${{ inputs.advanced-security }}
         PPA_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         GITHUB_TOKEN: ${{ github.token }}
-      shell: bash
+      shell: bash -euo pipefail {0}
 
     - name: Upload SARIF file to GitHub code scanning
       if: ${{ inputs.advanced-security == 'true' }}
@@ -60,4 +60,4 @@ runs:
       run: |
         echo "::error::pinprick audit found workflow security findings"
         exit 1
-      shell: bash
+      shell: bash -euo pipefail {0}
