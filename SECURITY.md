@@ -11,7 +11,12 @@ Include the affected component, version, or commit; reproduction steps; potentia
 impact; and any suggested mitigation. We will acknowledge the report,
 investigate it, and coordinate disclosure with you.
 
+This action is a thin wrapper that installs and runs the separate pinprick
+engine. Report vulnerabilities in pinprick's audit detection to the
+[pinprick project](https://github.com/starhaven-io/pinprick/security/advisories/new);
+issues in the wrapper itself (the checksum-verified install, exit-code mapping,
+or SARIF upload) belong here.
+
 ## Supported versions
 
-Security fixes are made against the current `main` branch and the latest released
-version of pinprick-action.
+Only the latest released version of pinprick-action is supported with security fixes.
