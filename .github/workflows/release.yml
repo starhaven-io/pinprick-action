@@ -1,0 +1,242 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "action.yml"
+      - "README.md"
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  release:
+    name: Release automated engine bump
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      checks: read # required to verify the bump PR's required checks
+      contents: write # required to create tags and GitHub releases
+      pull-requests: read # required to validate the merged bump PR
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Identify merged bump PR
+        id: pr
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          PULLS=$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/pulls")
+          MATCHES=$(jq -c \
+            --arg repository "${REPOSITORY}" \
+            '[.[] | select(
+              .merged_at != null
+              and .base.ref == "main"
+              and .head.repo.full_name == $repository
+              and .user.login == "starhaven-bot[bot]"
+              and (.head.ref | startswith("chore/pin-pinprick-"))
+            )]' <<< "${PULLS}")
+          COUNT=$(jq 'length' <<< "${MATCHES}")
+
+          if [[ "${COUNT}" == "0" ]]; then
+            echo "No merged starhaven-bot pinprick bump PR is associated with ${COMMIT_SHA}"
+            echo "eligible=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          if [[ "${COUNT}" != "1" ]]; then
+            echo "::error::Expected one associated pinprick bump PR, found ${COUNT}"
+            exit 1
+          fi
+
+          echo "eligible=true" >> "${GITHUB_OUTPUT}"
+          echo "number=$(jq -r '.[0].number' <<< "${MATCHES}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate engine bump
+        id: bump
+        if: steps.pr.outputs.eligible == 'true'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if ! git cat-file -e "${BEFORE_SHA}^{commit}"; then
+            echo "::error::Could not resolve the pre-push main commit ${BEFORE_SHA}"
+            exit 1
+          fi
+
+          CHANGED_FILES=$(git diff --name-only "${BEFORE_SHA}" "${COMMIT_SHA}" | LC_ALL=C sort)
+          if [[ "${CHANGED_FILES}" != $'README.md\naction.yml' ]]; then
+            echo "::error::Automated bump must change only README.md and action.yml"
+            exit 1
+          fi
+
+          git show "${BEFORE_SHA}:action.yml" > "${RUNNER_TEMP}/action.before.yml"
+          git show "${BEFORE_SHA}:README.md" > "${RUNNER_TEMP}/README.before.md"
+
+          ENGINE_VERSION=$(python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          old_action = (temp / "action.before.yml").read_text(encoding="utf-8")
+          old_readme = (temp / "README.before.md").read_text(encoding="utf-8")
+          new_action = Path("action.yml").read_text(encoding="utf-8")
+          new_readme = Path("README.md").read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              r'(?ms)^inputs:\n(?:(?!^\S).)*?^  version:\n'
+              r'(?:    [^\n]*\n)*?^    default: "('
+              r'[0-9]+\.[0-9]+\.[0-9]+'
+              r'(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?'
+              r')"$'
+          )
+
+          def version(content: str, label: str) -> str:
+              match = pattern.search(content)
+              if not match:
+                  raise SystemExit(f"could not find a SemVer version default in {label}")
+              return match.group(1)
+
+          old = version(old_action, "the previous action.yml")
+          new = version(new_action, "action.yml")
+          if old == new:
+              raise SystemExit("the pinprick default version did not change")
+          if old_action.count(old) != 3 or old_readme.count(old) != 2:
+              raise SystemExit("the previous version-reference contract has drifted")
+          if new_action != old_action.replace(old, new):
+              raise SystemExit("action.yml contains changes beyond the version replacement")
+          if new_readme != old_readme.replace(old, new):
+              raise SystemExit("README.md contains changes beyond the version replacement")
+
+          print(new)
+          PY
+          )
+
+          EXPECTED_BRANCH="chore/pin-pinprick-${ENGINE_VERSION}"
+          EXPECTED_TITLE="feat: pin pinprick ${ENGINE_VERSION} as the default version"
+          PR=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          if ! jq -e \
+            --arg branch "${EXPECTED_BRANCH}" \
+            --arg repository "${REPOSITORY}" \
+            --arg title "${EXPECTED_TITLE}" \
+            '.merged_at != null
+              and .base.ref == "main"
+              and .head.ref == $branch
+              and .head.repo.full_name == $repository
+              and .title == $title
+              and .user.login == "starhaven-bot[bot]"' \
+            <<< "${PR}" >/dev/null; then
+            echo "::error::Merged PR does not match the automated bump contract"
+            exit 1
+          fi
+
+          PR_FILES=$(gh api --paginate \
+            "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[].filename' | LC_ALL=C sort)
+          if [[ "${PR_FILES}" != $'README.md\naction.yml' ]]; then
+            echo "::error::Automated bump PR must contain only README.md and action.yml"
+            exit 1
+          fi
+
+          gh pr checks "${PR_NUMBER}" --repo "${REPOSITORY}" --required
+
+          PINPRICK_RELEASE=$(gh api \
+            "repos/starhaven-io/pinprick/releases/tags/v${ENGINE_VERSION}")
+          if ! jq -e '.draft == false' <<< "${PINPRICK_RELEASE}" >/dev/null; then
+            echo "::error::pinprick v${ENGINE_VERSION} is not a published release"
+            exit 1
+          fi
+
+          echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Select action release tag
+        id: tag
+        if: steps.pr.outputs.eligible == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          mapfile -t EXISTING_TAGS < <(
+            git tag --points-at "${COMMIT_SHA}" \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
+          )
+          if (( ${#EXISTING_TAGS[@]} > 1 )); then
+            echo "::error::Multiple action release tags already point at ${COMMIT_SHA}"
+            exit 1
+          fi
+
+          if (( ${#EXISTING_TAGS[@]} == 1 )); then
+            TAG="${EXISTING_TAGS[0]}"
+            CREATE=false
+          else
+            LATEST_TAG=$(
+              git tag --list \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -V \
+                | tail -1 || true
+            )
+            if [[ -z "${LATEST_TAG}" ]]; then
+              echo "::error::Could not find the latest action release tag"
+              exit 1
+            fi
+            TAG=$(python3 - "${LATEST_TAG}" <<'PY'
+          import sys
+
+          major, minor, patch = map(int, sys.argv[1][1:].split("."))
+          print(f"v{major}.{minor}.{patch + 1}")
+          PY
+            )
+            CREATE=true
+          fi
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "create=${CREATE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create action release tag
+        if: steps.pr.outputs.eligible == 'true' && steps.tag.outputs.create == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh api "repos/${REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${TAG}" \
+            -f "sha=${COMMIT_SHA}"
+
+      - name: Create action release
+        if: steps.pr.outputs.eligible == 'true'
+        env:
+          ENGINE_VERSION: ${{ steps.bump.outputs.engine_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" --repo "${REPOSITORY}" >/dev/null 2>&1; then
+            echo "Action release ${TAG} already exists"
+            exit 0
+          fi
+
+          gh release create "${TAG}" \
+            --repo "${REPOSITORY}" \
+            --verify-tag \
+            --title "${TAG}" \
+            --notes "Pins pinprick ${ENGINE_VERSION} as the default engine version."
