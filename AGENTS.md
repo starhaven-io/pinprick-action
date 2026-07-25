@@ -36,6 +36,10 @@ acknowledgement in `README.md` and `action.sh`.
 - `README.md`: usage, inputs, outputs, permissions, and exit behavior.
 - `test/failure-annotations.sh`: hermetic shim harness asserting that
   action.sh failure paths emit visible `::error` annotations.
+- `test/strict-provenance.sh`: hermetic shim harness asserting fail-open and
+  fail-closed provenance behavior.
+- `test/no-repo-config.sh`: hermetic shim harness asserting that the
+  no-repo-config input is validated and forwarded.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: README link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo and

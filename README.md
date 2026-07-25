@@ -109,6 +109,8 @@ checks for; bump the SHA when you adopt a newer release.
 | `path` | `.` | Repository path to scan. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
+| `strict-provenance` | `false` | Fail instead of warn when the pinprick archive's provenance attestation cannot be verified. Recommended on self-hosted runners. |
+| `no-repo-config` | `false` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults. Recommended when auditing repositories you don't control, so their config cannot suppress findings. |
 
 pinprick currently supports severity filtering through `.pinprick.toml`, not an
 audit CLI flag, so this action does not expose a `min-severity` input.
@@ -134,6 +136,27 @@ that runs pinprick.
 The action passes the workflow's `GITHUB_TOKEN` to pinprick so it can fetch and
 audit external action source when the job permissions allow it. Without a token,
 pinprick still scans local workflow `run:` blocks and local actions.
+
+## Provenance verification
+
+Every install verifies the downloaded archive's sha256 digest against the
+GitHub release metadata, then verifies the release's provenance attestation
+with `gh attestation verify`.
+
+Attestation verification fails open by default: when `gh` is missing or too
+old, or no GitHub token is available, the action logs a warning and continues
+on the strength of the checksum alone. GitHub-hosted runners always provide
+`gh` and a token, so the fail-open path is reachable only on self-hosted
+runners — exactly where scrutiny tends to be lowest. Set
+`strict-provenance: true` to turn every unverifiable-provenance condition
+(including pinprick releases that predate attestations) into a hard failure:
+
+```yaml
+- name: Run pinprick
+  uses: starhaven-io/pinprick-action@ce4153094c7d245d3cc310772758fdca7280ed5a # v0.4.3
+  with:
+    strict-provenance: true
+```
 
 ## Exit Behavior
 

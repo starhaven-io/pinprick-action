@@ -111,6 +111,8 @@ run_action() {
         PPA_PATH="." \
         PPA_ADVANCED_SECURITY="false" \
         PPA_FAIL_ON_FINDINGS="false" \
+        PPA_STRICT_PROVENANCE="false" \
+        PPA_NO_REPO_CONFIG="false" \
         "$@" \
         bash "${REPO_ROOT}/action.sh" \
         > "${SANDBOX}/stdout.log" 2> "${SANDBOX}/stderr.log" \
