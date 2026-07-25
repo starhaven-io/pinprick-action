@@ -69,7 +69,7 @@ chmod +x "${FULL_SHIMS}/curl"
 # /usr/bin/gh, so action.sh would find the real one and report a different
 # provenance gap. Link in only the tools action.sh shells out to.
 cp "${FULL_SHIMS}/curl" "${CURL_ONLY_SHIMS}/curl"
-for tool in bash env cat cp rm ln tar gzip gunzip sed awk grep mkdir chmod \
+for tool in bash env cat cp rm ln tar gzip gunzip sed awk grep od mkdir chmod \
     sleep sha256sum shasum python3 node; do
     tool_path="$(command -v "${tool}" 2>/dev/null)" || continue
     ln -sf "${tool_path}" "${CURL_ONLY_SHIMS}/${tool}"
