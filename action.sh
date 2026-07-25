@@ -21,8 +21,31 @@ note() {
     printf '::%s::%s\n' "${1}" "${message}" >&2
 }
 
-# Report an error and abort the step.
+# Fence repository-controlled engine output from workflow-command parsing.
+# Use an unpredictable token; stderr leaves stdout available for SARIF.
+COMMAND_FENCE_TOKEN=""
+
+fence_engine_output() {
+    local token
+    token="$(od -An -N16 -tx1 /dev/urandom)" || token=""
+    token="${token//[[:space:]]/}"
+    [[ "${token}" =~ ^[0-9a-f]{32}$ ]] || die "Could not generate a workflow-command fence token"
+    COMMAND_FENCE_TOKEN="${token}"
+    printf '::stop-commands::%s\n' "${COMMAND_FENCE_TOKEN}" >&2
+}
+
+unfence_engine_output() {
+    [[ -n "${COMMAND_FENCE_TOKEN}" ]] || return 0
+    printf '::%s::\n' "${COMMAND_FENCE_TOKEN}" >&2
+    COMMAND_FENCE_TOKEN=""
+}
+
+# Restore workflow-command processing after unexpected exits.
+trap unfence_engine_output EXIT
+
+# Reopen workflow-command processing before annotating failures.
 die() {
+    unfence_engine_output
     note error "${@}"
     exit 1
 }
@@ -322,10 +345,12 @@ main() {
     fi
 
     if [[ "${PPA_ADVANCED_SECURITY}" == "true" ]]; then
+        fence_engine_output
         set +e
-        "${PINPRICK_BIN}" "${audit_args[@]}" --sarif "${PPA_PATH}" > "${sarif_file}"
+        "${PINPRICK_BIN}" "${audit_args[@]}" --sarif -- "${PPA_PATH}" > "${sarif_file}"
         exitcode="${?}"
         set -e
+        unfence_engine_output
         # Publish the SARIF path only for clean/findings runs; on an engine
         # error the file holds whatever partial output preceded the failure,
         # and a caller using continue-on-error must not upload it.
@@ -333,10 +358,13 @@ main() {
             set_output "sarif-file" "${sarif_file}"
         fi
     else
+        fence_engine_output
         set +e
-        "${PINPRICK_BIN}" "${audit_args[@]}" "${PPA_PATH}"
+        # Keep the fence and repository-controlled output on one ordered stream.
+        "${PINPRICK_BIN}" "${audit_args[@]}" -- "${PPA_PATH}" >&2
         exitcode="${?}"
         set -e
+        unfence_engine_output
     fi
 
     set_output "exit-code" "${exitcode}"

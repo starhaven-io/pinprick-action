@@ -98,13 +98,13 @@ fail() {
 
 exitcode="$(run_action true)"
 [[ "${exitcode}" -eq 0 ]] || fail "enabled input exited ${exitcode}"
-grep -qxF "audit --no-repo-config ." "${SANDBOX}/args" \
+grep -qxF "audit --no-repo-config -- ." "${SANDBOX}/args" \
     || fail "no-repo-config was not forwarded"
 echo "ok: enabled input is forwarded"
 
 exitcode="$(run_action false)"
 [[ "${exitcode}" -eq 0 ]] || fail "disabled input exited ${exitcode}"
-grep -qxF "audit ." "${SANDBOX}/args" \
+grep -qxF "audit -- ." "${SANDBOX}/args" \
     || fail "disabled input changed the audit arguments"
 echo "ok: disabled input is omitted"
 

