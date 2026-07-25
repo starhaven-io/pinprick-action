@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@c247aaa3a3f4a994e03c200d070aab378727c5c0 # v0.5.0
+        uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
 ```
 
 ### Usage without GitHub Advanced Security
@@ -83,7 +83,7 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@c247aaa3a3f4a994e03c200d070aab378727c5c0 # v0.5.0
+        uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
         with:
           advanced-security: false
 ```
@@ -96,7 +96,7 @@ checks for; bump the SHA when you adopt a newer release.
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@c247aaa3a3f4a994e03c200d070aab378727c5c0 # v0.5.0
+  uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
   with:
     fail-on-findings: true
 ```
@@ -165,7 +165,7 @@ that predate attestations, into a hard failure:
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@c247aaa3a3f4a994e03c200d070aab378727c5c0 # v0.5.0
+  uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
   with:
     strict-provenance: true
 ```
