@@ -110,6 +110,7 @@ checks for; bump the SHA when you adopt a newer release.
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
 | `strict-provenance` | `false` | Fail instead of warn when the pinprick archive's provenance attestation cannot be verified. Recommended on self-hosted runners. |
+| `no-repo-config` | `false` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults. Recommended when auditing repositories you don't control, so their config cannot suppress findings. |
 
 pinprick currently supports severity filtering through `.pinprick.toml`, not an
 audit CLI flag, so this action does not expose a `min-severity` input.

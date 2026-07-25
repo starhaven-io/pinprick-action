@@ -304,6 +304,7 @@ main() {
     validate_bool "advanced-security" "${PPA_ADVANCED_SECURITY}"
     validate_bool "fail-on-findings" "${PPA_FAIL_ON_FINDINGS}"
     validate_bool "strict-provenance" "${PPA_STRICT_PROVENANCE}"
+    validate_bool "no-repo-config" "${PPA_NO_REPO_CONFIG}"
 
     have curl || die "Cannot install pinprick without curl"
     have tar || die "Cannot install pinprick without tar"
@@ -315,9 +316,14 @@ main() {
     install_pinprick "${PPA_VERSION}" "${target}"
     sarif_file="${RUNNER_TEMP}/pinprick.sarif"
 
+    local audit_args=(audit)
+    if [[ "${PPA_NO_REPO_CONFIG}" == "true" ]]; then
+        audit_args+=(--no-repo-config)
+    fi
+
     if [[ "${PPA_ADVANCED_SECURITY}" == "true" ]]; then
         set +e
-        "${PINPRICK_BIN}" audit --sarif "${PPA_PATH}" > "${sarif_file}"
+        "${PINPRICK_BIN}" "${audit_args[@]}" --sarif "${PPA_PATH}" > "${sarif_file}"
         exitcode="${?}"
         set -e
         # Publish the SARIF path only for clean/findings runs; on an engine
@@ -328,7 +334,7 @@ main() {
         fi
     else
         set +e
-        "${PINPRICK_BIN}" audit "${PPA_PATH}"
+        "${PINPRICK_BIN}" "${audit_args[@]}" "${PPA_PATH}"
         exitcode="${?}"
         set -e
     fi

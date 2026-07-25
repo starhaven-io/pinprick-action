@@ -83,6 +83,9 @@ jobs:
       - name: Assert strict provenance behavior
         run: ./test/strict-provenance.sh
 
+      - name: Assert no-repo-config behavior
+        run: ./test/no-repo-config.sh
+
   console:
     name: Console mode
     runs-on: ubuntu-24.04
@@ -196,6 +199,53 @@ jobs:
         env:
           OUTCOME: ${{ steps.findings_fail.outcome }}
         run: test "${OUTCOME}" = "failure"
+
+      - name: Create repo-config fixture
+        id: repo_config_fixture
+        env:
+          SOURCE_FIXTURE: ${{ steps.fixture.outputs.path }}
+        run: |
+          fixture="${RUNNER_TEMP}/pinprick-repo-config"
+          mkdir -p "${fixture}"
+          cp -R "${SOURCE_FIXTURE}/." "${fixture}/"
+          cat > "${fixture}/.pinprick.toml" <<'TOML'
+          [ignore]
+          patterns = ["piped to shell"]
+          TOML
+          printf 'path=%s\n' "${fixture}" >> "${GITHUB_OUTPUT}"
+
+      - name: Repository config suppresses findings
+        id: findings_with_repo_config
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: ${{ steps.repo_config_fixture.outputs.path }}
+
+      - name: Assert repository config behavior
+        env:
+          OUTCOME: ${{ steps.findings_with_repo_config.outcome }}
+          EXIT_CODE: ${{ steps.findings_with_repo_config.outputs['exit-code'] }}
+        run: |
+          test "${OUTCOME}" = "success"
+          test "${EXIT_CODE}" = "0"
+
+      - name: No-repo-config restores suppressed finding
+        id: findings_no_repo_config
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          no-repo-config: true
+          path: ${{ steps.repo_config_fixture.outputs.path }}
+
+      - name: Assert repository config was ignored
+        env:
+          OUTCOME: ${{ steps.findings_no_repo_config.outcome }}
+          EXIT_CODE: ${{ steps.findings_no_repo_config.outputs['exit-code'] }}
+        run: |
+          test "${OUTCOME}" = "success"
+          test "${EXIT_CODE}" = "1"
 
       - name: Invalid version fails
         id: invalid_version
