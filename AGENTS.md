@@ -44,6 +44,8 @@ acknowledgement in `README.md` and `action.sh`.
 - `lychee.toml`: README link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo and
   exposes the aggregate `conclusion` check the org ruleset requires.
+- `.github/workflows/engine-latest.yml`: weekly `version: latest` canary for
+  engine release-asset drift.
 - `.github/workflows/release.yml`: verifies merged starhaven-bot engine-version
   bumps, then creates the next patch tag and GitHub release.
 - `.github/workflows/codeql.yml`: actions CodeQL analysis.
