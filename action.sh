@@ -319,7 +319,12 @@ install_pinprick() {
 
     tar -xzf "${archive}" -C "${install_dir}"
     chmod +x "${install_dir}/pinprick"
-    "${install_dir}/pinprick" --version
+    # Smoke-test the binary. Bare, this exits through errexit with only the
+    # loader's message and no annotation, which is how a runner too old for the
+    # release build's glibc reports itself.
+    if ! "${install_dir}/pinprick" --version; then
+        die "Installed pinprick ${resolved_version} could not run on this ${target} runner; see the action's supported runners"
+    fi
     PINPRICK_BIN="${install_dir}/pinprick"
 }
 

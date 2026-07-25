@@ -51,6 +51,12 @@ cat > "${SANDBOX}/release/pinprick" <<'PINPRICK'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" ]]; then
+    # Stands in for a binary the runner cannot load, such as a release built
+    # against a newer glibc than the image provides.
+    if [[ "${SHIM_VERSION_EXIT:-0}" != "0" ]]; then
+        echo "shim: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.39' not found" >&2
+        exit "${SHIM_VERSION_EXIT}"
+    fi
     echo "pinprick 99.0.0"
     exit 0
 fi
@@ -282,6 +288,11 @@ expect_error "archive download" \
 
 expect_error "checksum mismatch" \
     "Downloaded pinprick archive checksum mismatch"
+
+expect_error "unloadable binary" \
+    "Installed pinprick 99.0.0 could not run on this x86_64-unknown-linux-gnu runner; see the action's supported runners" \
+    SHIM_METADATA="${SANDBOX}/metadata-match.json" \
+    SHIM_VERSION_EXIT="127"
 
 expect_error "attestation verification failure" \
     "pinprick archive provenance attestation verification failed" \
