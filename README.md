@@ -103,28 +103,14 @@ checks for; bump the SHA when you adopt a newer release.
 
 ## Supported runners
 
-pinprick publishes release builds for three targets; the action fails with an
-unsupported-platform error anywhere else.
-
-| Runner | Supported |
+| Runner | Architecture |
 | --- | --- |
-| Linux x64 (`ubuntu-24.04`, `ubuntu-slim`, …) | Yes |
-| Linux ARM64 (`ubuntu-24.04-arm`, public preview) | Yes |
-| GitHub-hosted macOS ARM64 | Yes |
-| GitHub-hosted macOS x64 | No |
-| Windows | No |
+| `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-26.04`, `ubuntu-slim` | Linux x64 |
+| `ubuntu-24.04-arm`, `ubuntu-26.04-arm` | Linux ARM64 |
+| `macos-latest`, `macos-15`, `macos-26` | macOS ARM64 |
 
-### Self-hosted runner prerequisites
-
-GitHub-hosted runners provide everything the action shells out to. Self-hosted
-runners need:
-
-- `curl` and `tar` to fetch and unpack the release archive.
-- `python3` or `node` to parse release metadata.
-- `sha256sum` or `shasum` to verify the archive digest.
-- `gh` with `gh attestation verify` support, plus a GitHub token, for
-  provenance verification. Without both, verification is skipped with a
-  warning by default or fails when `strict-provenance: true`.
+Every other GitHub-hosted runner is untested and unsupported. pinprick's Linux
+builds require glibc 2.39, and it publishes no x86_64 macOS or Windows build.
 
 ## Inputs
 

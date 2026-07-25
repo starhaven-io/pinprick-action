@@ -136,6 +136,59 @@ jobs:
           EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
         run: test "${EXIT_CODE}" = "0"
 
+  # 26.04 is public preview. Cover it so an incompatibility surfaces here
+  # rather than in a consumer's workflow, but keep it out of the required
+  # conclusion check until the images settle.
+  console_linux_2604:
+    name: Console mode (Ubuntu 26.04)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        id: run_pinprick
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
+  console_linux_2604_arm:
+    name: Console mode (Ubuntu 26.04 ARM64)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        id: run_pinprick
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
   console_macos:
     name: Console mode (macOS)
     runs-on: macos-15
