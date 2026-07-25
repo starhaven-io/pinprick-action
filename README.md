@@ -101,6 +101,31 @@ checks for; bump the SHA when you adopt a newer release.
     fail-on-findings: true
 ```
 
+## Supported runners
+
+pinprick publishes release builds for three targets; the action fails with an
+unsupported-platform error anywhere else.
+
+| Runner | Supported |
+| --- | --- |
+| Linux x64 (`ubuntu-24.04`, `ubuntu-slim`, …) | Yes |
+| Linux ARM64 (`ubuntu-24.04-arm`, public preview) | Yes |
+| GitHub-hosted macOS ARM64 | Yes |
+| GitHub-hosted macOS x64 | No |
+| Windows | No |
+
+### Self-hosted runner prerequisites
+
+GitHub-hosted runners provide everything the action shells out to. Self-hosted
+runners need:
+
+- `curl` and `tar` to fetch and unpack the release archive.
+- `python3` or `node` to parse release metadata.
+- `sha256sum` or `shasum` to verify the archive digest.
+- `gh` with `gh attestation verify` support, plus a GitHub token, for
+  provenance verification. Without both, verification is skipped with a
+  warning by default or fails when `strict-provenance: true`.
+
 ## Inputs
 
 | Input | Default | Description |
@@ -178,6 +203,11 @@ Each release of this action pins a specific pinprick version through the
 pinprick build on every run. To move to a newer pinprick, bump the action to a
 release whose default targets it, or set `version` yourself (including
 `latest`, if you accept non-deterministic installs).
+
+There is deliberately no floating major tag such as `@v1`: a mutable tag
+resolved at run time is exactly the pattern pinprick audits workflows for.
+Pin a full commit SHA with the release tag in a trailing comment, as every
+example above does, and bump it deliberately when adopting a new release.
 
 <!-- fleet:block license-section -->
 
