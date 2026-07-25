@@ -18,6 +18,17 @@ check:
         skipped+=("$2 (brew install $3)")
     }
     run diff git diff --check
+    shopt -s nullglob
+    shell_files=(action.sh test/*.sh)
+    run shell-syntax bash -n "${shell_files[@]}"
+    if command -v shellcheck &>/dev/null; then
+        run shellcheck shellcheck "${shell_files[@]}"
+    else
+        skip shellcheck shellcheck shellcheck
+    fi
+    for test_script in test/*.sh; do
+        run "$(basename "${test_script}")" "${test_script}"
+    done
     if command -v zizmor &>/dev/null; then
         run audit zizmor --persona auditor .
     else

@@ -34,6 +34,8 @@ acknowledgement in `README.md` and `action.sh`.
 - `action.sh`: installs pinprick from GitHub releases (checksum-verified) and
   runs `pinprick audit`, translating exit codes into step results.
 - `README.md`: usage, inputs, outputs, permissions, and exit behavior.
+- `test/failure-annotations.sh`: hermetic shim harness asserting that
+  action.sh failure paths emit visible `::error` annotations.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: README link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo and

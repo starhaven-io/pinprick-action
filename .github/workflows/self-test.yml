@@ -64,15 +64,21 @@ jobs:
           RUBY
 
       - name: Check shell syntax
-        run: bash -n action.sh
+        run: |
+          shopt -s nullglob
+          bash -n action.sh test/*.sh
 
       - name: ShellCheck
         run: |
+          shopt -s nullglob
           command -v shellcheck >/dev/null 2>&1 || {
             echo "::error::shellcheck is not installed on this runner"
             exit 1
           }
-          shellcheck action.sh
+          shellcheck action.sh test/*.sh
+
+      - name: Assert failure paths annotate
+        run: ./test/failure-annotations.sh
 
   console:
     name: Console mode
