@@ -49,16 +49,30 @@ validate_bool() {
 
 github_curl() {
     local url="${1}"
-    local headers=(
-        -H "Accept: application/vnd.github+json"
-        -H "X-GitHub-Api-Version: 2022-11-28"
+    local args=(
+        --proto '=https'
+        --proto-redir '=https'
+        --connect-timeout 10
+        --max-time 300
+        --retry 3
+        --retry-delay 1
+        -fsSL
     )
 
-    if [[ -n "${GITHUB_TOKEN:-}" && "${url}" == https://api.github.com/* ]]; then
-        headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+    # The REST headers and token belong to api.github.com only; the asset
+    # download redirects to a CDN that must never see the Authorization
+    # header and has no use for the API version.
+    if [[ "${url}" == https://api.github.com/* ]]; then
+        args+=(
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+        )
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+        fi
     fi
 
-    curl --proto '=https' --retry 3 --retry-delay 1 -fsSL "${headers[@]}" "${url}"
+    curl "${args[@]}" "${url}"
 }
 
 target_triple() {
@@ -102,7 +116,9 @@ for asset in assets:
         sys.exit(1)
     print(version)
     print(asset["browser_download_url"])
-    print(digest.removeprefix("sha256:"))
+    # Slicing rather than str.removeprefix keeps old self-hosted
+    # python3 (< 3.9) working.
+    print(digest[len("sha256:"):])
     sys.exit(0)
 
 available = ", ".join(asset.get("name", "<unnamed>") for asset in assets)
