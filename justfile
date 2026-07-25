@@ -40,7 +40,7 @@ check:
         skip pinprick-audit pinprick pinprick
     fi
     if command -v lychee &>/dev/null; then
-        run lychee lychee --config lychee.toml README.md
+        run lychee lychee --config lychee.toml README.md RELEASING.md
     else
         skip lychee lychee lychee
     fi
@@ -66,7 +66,7 @@ pinprick-audit:
 
 # Check README links
 lychee:
-    lychee --config lychee.toml README.md
+    lychee --config lychee.toml README.md RELEASING.md
 
 # Setup
 
