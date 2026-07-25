@@ -80,6 +80,9 @@ jobs:
       - name: Assert failure paths annotate
         run: ./test/failure-annotations.sh
 
+      - name: Assert strict provenance behavior
+        run: ./test/strict-provenance.sh
+
   console:
     name: Console mode
     runs-on: ubuntu-24.04

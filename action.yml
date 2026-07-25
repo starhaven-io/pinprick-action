@@ -22,6 +22,10 @@ inputs:
     description: Fail the workflow when pinprick reports findings.
     required: false
     default: "false"
+  strict-provenance:
+    description: Fail instead of warn when the pinprick archive's provenance attestation cannot be verified (gh missing or too old, no GitHub token, or a pinprick release that predates attestations). Recommended on self-hosted runners.
+    required: false
+    default: "false"
 
 outputs:
   exit-code:
@@ -45,6 +49,7 @@ runs:
         PPA_PATH: ${{ inputs.path }}
         PPA_ADVANCED_SECURITY: ${{ inputs.advanced-security }}
         PPA_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        PPA_STRICT_PROVENANCE: ${{ inputs.strict-provenance }}
         GITHUB_TOKEN: ${{ github.token }}
       shell: bash -euo pipefail {0}
 
