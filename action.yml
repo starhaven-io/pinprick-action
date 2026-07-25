@@ -26,7 +26,7 @@ inputs:
     required: false
     default: "false"
   strict-provenance:
-    description: Fail instead of warn when the pinprick archive's provenance attestation cannot be verified (gh missing or too old, no GitHub token, or a pinprick release that predates attestations). Recommended on self-hosted runners.
+    description: Require provenance verification to run. Fail instead of warn when the attestation cannot be checked (gh missing or too old, no GitHub token, or a pinprick release that predates attestations).
     required: false
     default: "false"
   no-repo-config:
