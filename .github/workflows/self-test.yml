@@ -209,6 +209,32 @@ jobs:
           OUTCOME: ${{ steps.invalid_version.outcome }}
         run: test "${OUTCOME}" = "failure"
 
+      - name: Create empty fixture
+        id: empty_fixture
+        run: |
+          fixture="${RUNNER_TEMP}/pinprick-empty"
+          mkdir -p "${fixture}"
+          printf 'path=%s\n' "${fixture}" >> "${GITHUB_OUTPUT}"
+
+      - name: Engine error fails
+        id: engine_error
+        continue-on-error: true
+        uses: ./
+        with:
+          advanced-security: true
+          fail-on-findings: false
+          path: ${{ steps.empty_fixture.outputs.path }}
+
+      - name: Assert engine error behavior
+        env:
+          OUTCOME: ${{ steps.engine_error.outcome }}
+          EXIT_CODE: ${{ steps.engine_error.outputs['exit-code'] }}
+          SARIF_FILE: ${{ steps.engine_error.outputs['sarif-file'] }}
+        run: |
+          test "${OUTCOME}" = "failure"
+          test "${EXIT_CODE}" = "2"
+          test -z "${SARIF_FILE}"
+
   sarif:
     name: SARIF mode
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
@@ -224,11 +250,21 @@ jobs:
           persist-credentials: false
 
       - name: Run local pinprick action
+        id: run_pinprick
         uses: ./
         with:
           advanced-security: true
           fail-on-findings: false
           path: .
+
+      - name: Assert SARIF content and output
+        env:
+          SARIF_FILE: ${{ steps.run_pinprick.outputs['sarif-file'] }}
+        run: |
+          test -n "${SARIF_FILE}"
+          test -s "${SARIF_FILE}"
+          jq -e '.runs[0].tool.driver.name == "pinprick"' "${SARIF_FILE}"
+          jq -e '(.runs[0].results | type) == "array"' "${SARIF_FILE}"
 
   conclusion:
     name: conclusion
