@@ -118,7 +118,7 @@ audit CLI flag, so this action does not expose a `min-severity` input.
 | Output | Description |
 | --- | --- |
 | `exit-code` | pinprick audit exit code. |
-| `sarif-file` | Filepath to the SARIF results when `advanced-security: true`. |
+| `sarif-file` | Filepath to usable SARIF results when `advanced-security: true` and the audit exits 0 or 1. |
 
 ## Permissions
 

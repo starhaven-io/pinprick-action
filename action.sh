@@ -306,11 +306,16 @@ main() {
     sarif_file="${RUNNER_TEMP}/pinprick.sarif"
 
     if [[ "${PPA_ADVANCED_SECURITY}" == "true" ]]; then
-        set_output "sarif-file" "${sarif_file}"
         set +e
         "${PINPRICK_BIN}" audit --sarif "${PPA_PATH}" > "${sarif_file}"
         exitcode="${?}"
         set -e
+        # Publish the SARIF path only for clean/findings runs; on an engine
+        # error the file holds whatever partial output preceded the failure,
+        # and a caller using continue-on-error must not upload it.
+        if (( exitcode <= 1 )); then
+            set_output "sarif-file" "${sarif_file}"
+        fi
     else
         set +e
         "${PINPRICK_BIN}" audit "${PPA_PATH}"
