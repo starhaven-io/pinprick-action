@@ -9,8 +9,16 @@
 set -euo pipefail
 
 # Emit a GitHub Actions workflow command: note <level> <message...>
+# Writes to stderr, which the runner also scans for workflow commands, so
+# messages stay visible inside command substitutions that capture stdout.
+# Percent signs and newlines are escaped per the workflow-command data
+# convention so a message cannot truncate itself or inject a second command.
 note() {
-    printf '::%s::%s\n' "${1}" "${*:2}"
+    local message="${*:2}"
+    message="${message//'%'/%25}"
+    message="${message//$'\r'/%0D}"
+    message="${message//$'\n'/%0A}"
+    printf '::%s::%s\n' "${1}" "${message}" >&2
 }
 
 # Report an error and abort the step.
@@ -212,6 +220,9 @@ verify_attestation() {
     die "pinprick archive provenance attestation verification failed"
 }
 
+# Install the requested pinprick release and set PINPRICK_BIN to the verified
+# binary path. A stdout return would put every note/die in this call tree
+# inside a captured stream, so the result travels through a global instead.
 install_pinprick() {
     local version="${1}"
     local target="${2}"
@@ -231,10 +242,14 @@ install_pinprick() {
     local archive="${workdir}/pinprick.tar.gz"
     mkdir -p "${workdir}"
 
-    github_curl "${api_url}" > "${metadata}"
+    if ! github_curl "${api_url}" > "${metadata}"; then
+        die "Could not fetch pinprick release metadata for '${version}'"
+    fi
 
     local release_info
-    release_info="$(parse_release_metadata "${metadata}" "${target}")"
+    if ! release_info="$(parse_release_metadata "${metadata}" "${target}")"; then
+        die "Could not resolve a pinprick ${version} release asset for ${target}"
+    fi
 
     local resolved_version download_url expected_sha actual_sha install_dir
     resolved_version="$(sed -n '1p' <<< "${release_info}")"
@@ -243,21 +258,21 @@ install_pinprick() {
     install_dir="${workdir}/${resolved_version}"
 
     mkdir -p "${install_dir}"
-    github_curl "${download_url}" > "${archive}"
+    if ! github_curl "${download_url}" > "${archive}"; then
+        die "Could not download the pinprick release archive"
+    fi
 
     actual_sha="$(sha256_file "${archive}")"
     if [[ "${actual_sha}" != "${expected_sha}" ]]; then
         die "Downloaded pinprick archive checksum mismatch"
     fi
 
-    # Keep stdout clean: install_pinprick's stdout is captured as the binary
-    # path, so route verification progress to stderr.
-    verify_attestation "${archive}" "${resolved_version}" >&2
+    verify_attestation "${archive}" "${resolved_version}"
 
     tar -xzf "${archive}" -C "${install_dir}"
     chmod +x "${install_dir}/pinprick"
-    "${install_dir}/pinprick" --version >&2
-    echo "${install_dir}/pinprick"
+    "${install_dir}/pinprick" --version
+    PINPRICK_BIN="${install_dir}/pinprick"
 }
 
 main() {
@@ -267,22 +282,22 @@ main() {
     have curl || die "Cannot install pinprick without curl"
     have tar || die "Cannot install pinprick without tar"
 
-    local target pinprick sarif_file exitcode
+    local target sarif_file exitcode
     target="$(target_triple)"
     note debug "resolved runner target ${target}"
 
-    pinprick="$(install_pinprick "${PPA_VERSION}" "${target}")"
+    install_pinprick "${PPA_VERSION}" "${target}"
     sarif_file="${RUNNER_TEMP}/pinprick.sarif"
 
     if [[ "${PPA_ADVANCED_SECURITY}" == "true" ]]; then
         set_output "sarif-file" "${sarif_file}"
         set +e
-        "${pinprick}" audit --sarif "${PPA_PATH}" > "${sarif_file}"
+        "${PINPRICK_BIN}" audit --sarif "${PPA_PATH}" > "${sarif_file}"
         exitcode="${?}"
         set -e
     else
         set +e
-        "${pinprick}" audit "${PPA_PATH}"
+        "${PINPRICK_BIN}" audit "${PPA_PATH}"
         exitcode="${?}"
         set -e
     fi

@@ -18,6 +18,10 @@ check:
         skipped+=("$2 (brew install $3)")
     }
     run diff git diff --check
+    shopt -s nullglob
+    for test_script in test/*.sh; do
+        run "$(basename "${test_script}")" "${test_script}"
+    done
     if command -v zizmor &>/dev/null; then
         run audit zizmor --persona auditor .
     else
