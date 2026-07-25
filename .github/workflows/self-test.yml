@@ -111,8 +111,6 @@ jobs:
           EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
         run: test "${EXIT_CODE}" = "0"
 
-  # Keep public-preview runner coverage visible without making it part of the
-  # org-required conclusion check until the job has proven reliable.
   console_linux_arm:
     name: Console mode (Linux ARM64)
     runs-on: ubuntu-24.04-arm
@@ -348,7 +346,7 @@ jobs:
 
   conclusion:
     name: conclusion
-    needs: [validate, console, console_macos, contract, sarif]
+    needs: [validate, console, console_linux_arm, console_macos, contract, sarif]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     if: always()
@@ -357,12 +355,14 @@ jobs:
         env:
           VALIDATE: ${{ needs.validate.result }}
           CONSOLE: ${{ needs.console.result }}
+          CONSOLE_LINUX_ARM: ${{ needs.console_linux_arm.result }}
           CONSOLE_MACOS: ${{ needs.console_macos.result }}
           CONTRACT: ${{ needs.contract.result }}
           SARIF: ${{ needs.sarif.result }}
         run: |
           test "${VALIDATE}" = "success"
           test "${CONSOLE}" = "success"
+          test "${CONSOLE_LINUX_ARM}" = "success"
           test "${CONSOLE_MACOS}" = "success"
           test "${CONTRACT}" = "success"
           [[ "${SARIF}" == "success" || "${SARIF}" == "skipped" ]]
