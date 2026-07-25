@@ -86,115 +86,58 @@ jobs:
       - name: Assert no-repo-config behavior
         run: ./test/no-repo-config.sh
 
+  # Every runner label README lists as supported. Keep the two in step: a
+  # label belongs in one of these matrices or it does not belong in the table.
   console:
-    name: Console mode
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Run local pinprick action
-        id: run_pinprick
-        uses: ./
-        with:
-          advanced-security: false
-          fail-on-findings: false
-          path: .
-
-      - name: Assert clean exit code
-        env:
-          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
-        run: test "${EXIT_CODE}" = "0"
-
-  console_linux_arm:
-    name: Console mode (Linux ARM64)
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Run local pinprick action
-        id: run_pinprick
-        uses: ./
-        with:
-          advanced-security: false
-          fail-on-findings: false
-          path: .
-
-      - name: Assert clean exit code
-        env:
-          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
-        run: test "${EXIT_CODE}" = "0"
-
-  # 26.04 is public preview. Cover it so an incompatibility surfaces here
-  # rather than in a consumer's workflow, but keep it out of the required
-  # conclusion check until the images settle.
-  console_linux_2604:
-    name: Console mode (Ubuntu 26.04)
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Run local pinprick action
-        id: run_pinprick
-        uses: ./
-        with:
-          advanced-security: false
-          fail-on-findings: false
-          path: .
-
-      - name: Assert clean exit code
-        env:
-          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
-        run: test "${EXIT_CODE}" = "0"
-
-  console_linux_2604_arm:
-    name: Console mode (Ubuntu 26.04 ARM64)
-    runs-on: ubuntu-26.04-arm
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Run local pinprick action
-        id: run_pinprick
-        uses: ./
-        with:
-          advanced-security: false
-          fail-on-findings: false
-          path: .
-
-      - name: Assert clean exit code
-        env:
-          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
-        run: test "${EXIT_CODE}" = "0"
-
-  console_macos:
-    name: Console mode (macOS)
-    runs-on: macos-15
+    name: Console mode (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04
+          - ubuntu-slim
+          - ubuntu-24.04-arm
+          - macos-latest
+          - macos-15
+          - macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        id: run_pinprick
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
+  # Public-preview images, held out of the required conclusion check so an
+  # image that is unavailable or in flux cannot block every pull request.
+  console_preview:
+    name: Console mode (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-26.04
+          - ubuntu-26.04-arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -399,7 +342,9 @@ jobs:
 
   conclusion:
     name: conclusion
-    needs: [validate, console, console_linux_arm, console_macos, contract, sarif]
+    # console_preview is deliberately absent: preview images report but do not
+    # gate. needs.console.result aggregates every leg of that matrix.
+    needs: [validate, console, contract, sarif]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     if: always()
@@ -408,14 +353,10 @@ jobs:
         env:
           VALIDATE: ${{ needs.validate.result }}
           CONSOLE: ${{ needs.console.result }}
-          CONSOLE_LINUX_ARM: ${{ needs.console_linux_arm.result }}
-          CONSOLE_MACOS: ${{ needs.console_macos.result }}
           CONTRACT: ${{ needs.contract.result }}
           SARIF: ${{ needs.sarif.result }}
         run: |
           test "${VALIDATE}" = "success"
           test "${CONSOLE}" = "success"
-          test "${CONSOLE_LINUX_ARM}" = "success"
-          test "${CONSOLE_MACOS}" = "success"
           test "${CONTRACT}" = "success"
           [[ "${SARIF}" == "success" || "${SARIF}" == "skipped" ]]
