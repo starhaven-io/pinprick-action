@@ -1,0 +1,49 @@
+name: Latest engine
+
+# Weekly canary for `version: latest`: that path resolves a different API
+# endpoint than pinned installs and is the first place engine release-asset
+# naming drift would surface. Scheduled rather than per-PR so a flaky or
+# freshly-cut engine release cannot block unrelated changes.
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # every Monday at 15:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: "engine-latest"
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+permissions: {}
+
+jobs:
+  latest:
+    name: Console mode (version latest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action with the latest engine
+        id: run_pinprick
+        uses: ./
+        with:
+          version: latest
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert audit completed
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: |
+          [[ "${EXIT_CODE}" == "0" || "${EXIT_CODE}" == "1" ]]

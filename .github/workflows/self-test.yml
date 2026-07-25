@@ -111,6 +111,33 @@ jobs:
           EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
         run: test "${EXIT_CODE}" = "0"
 
+  # Keep public-preview runner coverage visible without making it part of the
+  # org-required conclusion check until the job has proven reliable.
+  console_linux_arm:
+    name: Console mode (Linux ARM64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run local pinprick action
+        id: run_pinprick
+        uses: ./
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          path: .
+
+      - name: Assert clean exit code
+        env:
+          EXIT_CODE: ${{ steps.run_pinprick.outputs['exit-code'] }}
+        run: test "${EXIT_CODE}" = "0"
+
   console_macos:
     name: Console mode (macOS)
     runs-on: macos-15
