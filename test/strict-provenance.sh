@@ -63,7 +63,21 @@ else
 fi
 SHIM
 chmod +x "${FULL_SHIMS}/curl"
+
+# The gh-missing cases need a PATH that provably lacks gh. Omitting the shim
+# from a PATH that still carries /usr/bin is not enough: hosted runners ship
+# /usr/bin/gh, so action.sh would find the real one and report a different
+# provenance gap. Link in only the tools action.sh shells out to.
 cp "${FULL_SHIMS}/curl" "${CURL_ONLY_SHIMS}/curl"
+for tool in bash env cat cp rm ln tar gzip gunzip sed awk grep mkdir chmod \
+    sleep sha256sum shasum python3 node; do
+    tool_path="$(command -v "${tool}" 2>/dev/null)" || continue
+    ln -sf "${tool_path}" "${CURL_ONLY_SHIMS}/${tool}"
+done
+if PATH="${CURL_ONLY_SHIMS}" command -v gh >/dev/null 2>&1; then
+    echo "FAIL harness setup: gh is reachable from the gh-missing PATH" >&2
+    exit 1
+fi
 
 cat > "${FULL_SHIMS}/gh" <<'SHIM'
 #!/usr/bin/env bash
@@ -140,11 +154,11 @@ expect_error() {
 }
 
 expect_success "missing gh fails open by default" \
-    PATH="${CURL_ONLY_SHIMS}:/usr/bin:/bin"
+    PATH="${CURL_ONLY_SHIMS}"
 
 expect_error "missing gh fails closed" \
     "gh is not installed; failing because strict-provenance is enabled" \
-    PATH="${CURL_ONLY_SHIMS}:/usr/bin:/bin" \
+    PATH="${CURL_ONLY_SHIMS}" \
     PPA_STRICT_PROVENANCE="true"
 
 expect_error "old gh fails closed" \
@@ -158,7 +172,7 @@ expect_error "missing token fails closed" \
 
 expect_error "pre-attestation release fails closed" \
     "pinprick 0.6.0 predates release attestations; failing because strict-provenance is enabled" \
-    PATH="${CURL_ONLY_SHIMS}:/usr/bin:/bin" \
+    PATH="${CURL_ONLY_SHIMS}" \
     SHIM_METADATA="${SANDBOX}/metadata-old.json" \
     PPA_VERSION="0.6.0" \
     PPA_STRICT_PROVENANCE="true"
