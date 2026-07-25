@@ -1,0 +1,131 @@
+name: Release (manual)
+
+# Wrapper-only changes (action.sh fixes, workflow or doc work) have no
+# automated release path: release.yml fires solely for starhaven-bot engine
+# bumps. This dispatch-only workflow covers the gap with the same tag and
+# release conventions. See RELEASING.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to create, e.g. v0.4.4
+        required: true
+        type: string
+      notes:
+        description: One-line summary of the wrapper changes in this release
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  release:
+    name: Release wrapper changes
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      checks: read # required to verify the released commit's conclusion check
+      contents: write # required to create tags and GitHub releases
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Validate release request
+        id: request
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ inputs.version }}
+        run: |
+          if [[ "${REF}" != "refs/heads/main" ]]; then
+            echo "::error::Releases are cut from main, not ${REF}"
+            exit 1
+          fi
+
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'version' must look like v0.4.4"
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag ${TAG} already exists"
+            exit 1
+          fi
+
+          LATEST_TAG=$(
+            git tag --list \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | tail -1 || true
+          )
+          if [[ -n "${LATEST_TAG}" ]]; then
+            HIGHEST=$(printf '%s\n%s\n' "${LATEST_TAG}" "${TAG}" | sort -V | tail -1)
+            if [[ "${HIGHEST}" != "${TAG}" ]]; then
+              echo "::error::${TAG} does not sort above the latest release ${LATEST_TAG}"
+              exit 1
+            fi
+          fi
+
+          CONCLUSION=$(gh api \
+            "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?check_name=conclusion" \
+            --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+          if [[ "${CONCLUSION}" == "0" ]]; then
+            echo "::error::The conclusion check has not succeeded for ${COMMIT_SHA}"
+            exit 1
+          fi
+
+          ENGINE_VERSION=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          action = Path("action.yml").read_text(encoding="utf-8")
+          # Manual wrapper releases intentionally follow action.sh's
+          # stable-version-only input contract.
+          pattern = re.compile(
+              r'(?ms)^inputs:\n(?:(?!^\S).)*?^  version:\n'
+              r'(?:    [^\n]*\n)*?^    default: "'
+              r'([0-9]+\.[0-9]+\.[0-9]+)"$'
+          )
+          match = pattern.search(action)
+          if not match:
+              raise SystemExit("could not find a SemVer version default in action.yml")
+          print(match.group(1))
+          PY
+          )
+
+          echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create action tag and release
+        # Let gh create the tag at the validated commit. --verify-tag would
+        # require a pre-existing tag and reintroduce stranded-tag recovery.
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          ENGINE_VERSION: ${{ steps.request.outputs.engine_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ inputs.notes }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ inputs.version }}
+        run: |
+          gh release create "${TAG}" \
+            --repo "${REPOSITORY}" \
+            --target "${COMMIT_SHA}" \
+            --fail-on-no-commits \
+            --title "${TAG}" \
+            --notes "${NOTES}
+
+          Pins pinprick ${ENGINE_VERSION} as the default engine version."

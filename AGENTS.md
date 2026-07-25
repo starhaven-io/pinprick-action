@@ -34,6 +34,7 @@ acknowledgement in `README.md` and `action.sh`.
 - `action.sh`: installs pinprick from GitHub releases (checksum-verified) and
   runs `pinprick audit`, translating exit codes into step results.
 - `README.md`: usage, inputs, outputs, permissions, and exit behavior.
+- `RELEASING.md`: automated and manual release procedures.
 - `test/failure-annotations.sh`: hermetic shim harness asserting that
   action.sh failure paths emit visible `::error` annotations.
 - `test/strict-provenance.sh`: hermetic shim harness asserting fail-open and
@@ -48,6 +49,8 @@ acknowledgement in `README.md` and `action.sh`.
   engine release-asset drift.
 - `.github/workflows/release.yml`: verifies merged starhaven-bot engine-version
   bumps, then creates the next patch tag and GitHub release.
+- `.github/workflows/release-manual.yml`: dispatch-only release path for
+  wrapper changes; conventions in `RELEASING.md`.
 - `.github/workflows/codeql.yml`: actions CodeQL analysis.
 - `.github/workflows/link-check.yml`: weekly README link check.
 - `.github/workflows/zizmor.yml`: GitHub Actions security audit.
