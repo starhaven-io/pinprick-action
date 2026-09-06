@@ -35,11 +35,12 @@ jobs:
 
       - name: Run local pinprick action with the latest engine
         id: run_pinprick
-        uses: ./
+        uses: $/
         with:
           version: latest
           advanced-security: false
           fail-on-findings: false
+          no-repo-config: true
           path: .
 
       - name: Assert audit completed

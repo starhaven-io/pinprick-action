@@ -14,6 +14,11 @@ trap 'rm -rf "${SANDBOX}"' EXIT
 
 SHIMS="${SANDBOX}/bin"
 mkdir -p "${SHIMS}" "${SANDBOX}/release"
+# Keep a bare pinprick archive in this harness and prefer GNU tar when
+# available, covering the compatibility fallback on macOS development hosts.
+if command -v gtar >/dev/null 2>&1; then
+    ln -s "$(command -v gtar)" "${SHIMS}/tar"
+fi
 
 cat > "${SHIMS}/curl" <<'SHIM'
 #!/usr/bin/env bash
@@ -37,6 +42,9 @@ chmod +x "${SHIMS}/curl"
 cat > "${SHIMS}/gh" <<'SHIM'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" && "${3:-}" == "--help" ]]; then
+    echo "      --signer-workflow string"
+    echo "      --source-ref string"
+    echo "      --deny-self-hosted-runners"
     exit 0
 fi
 if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" ]]; then
@@ -57,7 +65,7 @@ if [[ "${1:-}" == "--version" ]]; then
         echo "shim: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.39' not found" >&2
         exit "${SHIM_VERSION_EXIT}"
     fi
-    echo "pinprick 99.0.0"
+    echo "pinprick ${SHIM_BINARY_VERSION:-99.0.0}"
     exit 0
 fi
 if [[ "${1:-}" == "audit" ]]; then
@@ -81,13 +89,15 @@ fi
 write_metadata() {
     local file="${1}"
     local digest="${2}"
+    local version="${3:-99.0.0}"
+    local url="${4:-https://github.com/starhaven-io/pinprick/releases/download/v${version}/pinprick-${version}-x86_64-unknown-linux-gnu.tar.gz}"
     cat > "${file}" <<JSON
 {
-  "tag_name": "v99.0.0",
+  "tag_name": "v${version}",
   "assets": [
     {
-      "name": "pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz",
-      "browser_download_url": "https://example.invalid/pinprick.tar.gz",
+      "name": "pinprick-${version}-x86_64-unknown-linux-gnu.tar.gz",
+      "browser_download_url": "${url}",
       "digest": "sha256:${digest}"
     }
   ]
@@ -98,7 +108,36 @@ JSON
 write_metadata "${SANDBOX}/metadata-mismatch.json" \
     "0000000000000000000000000000000000000000000000000000000000000000"
 write_metadata "${SANDBOX}/metadata-match.json" "${ARCHIVE_SHA}"
+write_metadata "${SANDBOX}/metadata-resolved-mismatch.json" "${ARCHIVE_SHA}" "98.0.0"
+write_metadata "${SANDBOX}/metadata-wrong-url.json" "${ARCHIVE_SHA}" "99.0.0" \
+    "https://example.invalid/pinprick.tar.gz"
 printf '{"tag_name":"v99.0.0","assets":[]}\n' > "${SANDBOX}/metadata-empty.json"
+printf '{not-json\n' > "${SANDBOX}/metadata-invalid-json.json"
+printf '{"tag_name":"v99.0.0","assets":{}}\n' > "${SANDBOX}/metadata-invalid-assets.json"
+printf '{"tag_name":"v99.0.0","assets":[{"name":"pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz","browser_download_url":"https://github.com/starhaven-io/pinprick/releases/download/v99.0.0/pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz"}]}\n' \
+    > "${SANDBOX}/metadata-no-digest.json"
+printf '{"tag_name":"v99.0.0-rc.1","assets":[]}\n' > "${SANDBOX}/metadata-prerelease.json"
+
+mkdir -p "${SANDBOX}/release-missing"
+printf '%s\n' "not a pinprick archive" > "${SANDBOX}/release-missing/README"
+tar -czf "${SANDBOX}/archive-missing.tar.gz" -C "${SANDBOX}/release-missing" README
+if command -v sha256sum >/dev/null 2>&1; then
+    MISSING_ARCHIVE_SHA="$(sha256sum "${SANDBOX}/archive-missing.tar.gz" | awk '{ print $1 }')"
+else
+    MISSING_ARCHIVE_SHA="$(shasum -a 256 "${SANDBOX}/archive-missing.tar.gz" | awk '{ print $1 }')"
+fi
+write_metadata "${SANDBOX}/metadata-missing-archive-entry.json" "${MISSING_ARCHIVE_SHA}"
+
+mkdir -p "${SANDBOX}/release-nested/bin"
+cp "${SANDBOX}/release/pinprick" "${SANDBOX}/release-nested/bin/pinprick"
+tar -czf "${SANDBOX}/archive-nested.tar.gz" \
+    -C "${SANDBOX}/release-nested" bin/pinprick
+if command -v sha256sum >/dev/null 2>&1; then
+    NESTED_ARCHIVE_SHA="$(sha256sum "${SANDBOX}/archive-nested.tar.gz" | awk '{ print $1 }')"
+else
+    NESTED_ARCHIVE_SHA="$(shasum -a 256 "${SANDBOX}/archive-nested.tar.gz" | awk '{ print $1 }')"
+fi
+write_metadata "${SANDBOX}/metadata-nested-archive-entry.json" "${NESTED_ARCHIVE_SHA}"
 
 run_action() {
     rm -rf "${SANDBOX}/tmp"
@@ -116,6 +155,7 @@ run_action() {
         SHIM_METADATA="${SANDBOX}/metadata-mismatch.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
         SHIM_FAIL_URL="" \
+        SHIM_BINARY_VERSION="99.0.0" \
         PPA_VERSION="99.0.0" \
         PPA_PATH="." \
         PPA_ADVANCED_SECURITY="false" \
@@ -269,6 +309,10 @@ expect_error "invalid version" \
     "'version' must be 'latest' or an exact X.Y.Z version" \
     PPA_VERSION="not-a-version"
 
+expect_error "non-canonical version" \
+    "'version' must be 'latest' or an exact X.Y.Z version" \
+    PPA_VERSION="01.2.3"
+
 expect_error "unsupported platform" \
     "pinprick does not support Windows" \
     RUNNER_OS="Windows"
@@ -281,18 +325,57 @@ expect_error "release asset resolution" \
     "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
     SHIM_METADATA="${SANDBOX}/metadata-empty.json"
 
+expect_error "invalid release JSON" \
+    "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
+    SHIM_METADATA="${SANDBOX}/metadata-invalid-json.json"
+
+expect_error "invalid release assets shape" \
+    "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
+    SHIM_METADATA="${SANDBOX}/metadata-invalid-assets.json"
+
+expect_error "release tag canonicalization" \
+    "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
+    SHIM_METADATA="${SANDBOX}/metadata-prerelease.json"
+
+expect_error "release digest required" \
+    "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
+    SHIM_METADATA="${SANDBOX}/metadata-no-digest.json"
+
+expect_error "release URL canonicalization" \
+    "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
+    SHIM_METADATA="${SANDBOX}/metadata-wrong-url.json"
+
+expect_error "requested release mismatch" \
+    "Resolved pinprick version 98.0.0 does not match requested version 99.0.0" \
+    SHIM_METADATA="${SANDBOX}/metadata-resolved-mismatch.json"
+
 expect_error "archive download" \
     "Could not download the pinprick release archive" \
     SHIM_METADATA="${SANDBOX}/metadata-match.json" \
-    SHIM_FAIL_URL="example.invalid"
+    SHIM_FAIL_URL="releases/download"
 
 expect_error "checksum mismatch" \
     "Downloaded pinprick archive checksum mismatch"
+
+expect_error "missing archive entry" \
+    "Could not extract pinprick from the release archive" \
+    SHIM_METADATA="${SANDBOX}/metadata-missing-archive-entry.json" \
+    SHIM_ARCHIVE="${SANDBOX}/archive-missing.tar.gz"
+
+expect_error "nested archive entry" \
+    "Could not extract pinprick from the release archive" \
+    SHIM_METADATA="${SANDBOX}/metadata-nested-archive-entry.json" \
+    SHIM_ARCHIVE="${SANDBOX}/archive-nested.tar.gz"
 
 expect_error "unloadable binary" \
     "Installed pinprick 99.0.0 could not run on this x86_64-unknown-linux-gnu runner; see the action's supported runners" \
     SHIM_METADATA="${SANDBOX}/metadata-match.json" \
     SHIM_VERSION_EXIT="127"
+
+expect_error "binary version mismatch" \
+    "Installed pinprick reported 'pinprick 98.0.0', expected 'pinprick 99.0.0'" \
+    SHIM_METADATA="${SANDBOX}/metadata-match.json" \
+    SHIM_BINARY_VERSION="98.0.0"
 
 expect_error "attestation verification failure" \
     "pinprick archive provenance attestation verification failed" \
@@ -303,5 +386,10 @@ expect_success
 expect_fenced
 expect_fence_closed_before_error
 expect_fence_absent_from_sarif
+
+expect_error "signal-style engine failure" \
+    "pinprick audit errored with exit code 137" \
+    SHIM_METADATA="${SANDBOX}/metadata-match.json" \
+    SHIM_AUDIT_EXIT="137"
 
 echo "all failure paths annotate, the success path holds, and engine output is fenced"

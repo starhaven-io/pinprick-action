@@ -6,9 +6,10 @@ pinprick audits GitHub Actions supply chain security by finding runtime fetch
 patterns that bypass pinning, checking action references, and reporting results
 through an explainable, open scoring rubric.
 
-This wrapper installs pinprick from GitHub releases, verifies the downloaded
-archive's sha256 digest, and verifies GitHub provenance attestations before
-extracting attested release assets.
+This wrapper installs pinprick from GitHub releases and always verifies the
+downloaded archive's sha256 digest. For attested engine releases it also checks
+that provenance was issued by pinprick's release workflow, subject to the
+fail-open and strict modes described below, before extracting the binary.
 
 ## Quickstart
 
@@ -45,12 +46,14 @@ jobs:
       actions: read # needed for private/internal repositories
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
+        uses: starhaven-io/pinprick-action@475e6e84a584bc6d5d6f65958beff2732905f8a3 # v0.5.3
+        with:
+          no-repo-config: true
 ```
 
 ### Usage without GitHub Advanced Security
@@ -78,14 +81,15 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
+        uses: starhaven-io/pinprick-action@475e6e84a584bc6d5d6f65958beff2732905f8a3 # v0.5.3
         with:
           advanced-security: false
+          no-repo-config: true
 ```
 
 Each example pins pinprick-action to a full commit SHA with the release tag in a
@@ -96,7 +100,7 @@ checks for; bump the SHA when you adopt a newer release.
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
+  uses: starhaven-io/pinprick-action@475e6e84a584bc6d5d6f65958beff2732905f8a3 # v0.5.3
   with:
     fail-on-findings: true
 ```
@@ -122,12 +126,18 @@ build.
 | `version` | `0.23.1` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.23.1`. |
 | `path` | `.` | Repository path to scan. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
+| `sarif-category` | `pinprick` | Code scanning category for the upload. Use a unique value for each invocation in the same workflow. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
 | `strict-provenance` | `false` | Require provenance verification to run: fail instead of warn when the attestation cannot be checked. |
-| `no-repo-config` | `false` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults. Recommended when auditing repositories you don't control, so their config cannot suppress findings. |
+| `no-repo-config` | `true` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults, preventing a pull request from suppressing its own findings. |
 
 pinprick currently supports severity filtering through `.pinprick.toml`, not an
 audit CLI flag, so this action does not expose a `min-severity` input.
+
+Set `no-repo-config: false` only when you deliberately trust and want to apply
+the scanned repository's policy. On pull request workflows, leaving the secure
+default in place prevents a contributor-controlled `.pinprick.toml` from hiding
+the contributor's workflow findings.
 
 ## Outputs
 
@@ -153,19 +163,23 @@ pinprick still scans local workflow `run:` blocks and local actions.
 
 ## Provenance verification
 
-Every install verifies the downloaded archive's sha256 digest against the
-GitHub release metadata, then attempts to verify the release's provenance
-attestation with `gh attestation verify`.
+Every install requires canonical release metadata, verifies the downloaded
+archive's sha256 digest, and checks that the binary reports the resolved engine
+version. For attested releases, it then asks `gh attestation verify` to require
+an attestation from `starhaven-io/pinprick`'s release workflow on `main`, signed
+on a GitHub-hosted runner.
 
 Verification fails open by default: when `gh` is missing or too old, or no
 GitHub token is available, the action warns and continues on the strength of
-the checksum alone. Set `strict-provenance: true` to require that verification
-actually ran, turning every unverifiable condition, including engine releases
-that predate attestations, into a hard failure:
+the checksum and version checks alone. An exact engine release that predates
+attestations retains this compatibility behavior, but `version: latest` is
+never allowed to resolve to such a release. Set `strict-provenance: true` to
+require that attestation verification actually ran, turning every unverifiable
+condition into a hard failure:
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@f8bc129dec3c77e762c87170a8da66d60678a63c # v0.5.1
+  uses: starhaven-io/pinprick-action@475e6e84a584bc6d5d6f65958beff2732905f8a3 # v0.5.3
   with:
     strict-provenance: true
 ```

@@ -1,5 +1,5 @@
 # Configuration for https://github.com/lycheeverse/lychee
-# Checks links in README.md.
+# Shared link-check settings for the repository documentation.
 
 max_concurrency = 20
 timeout = 20

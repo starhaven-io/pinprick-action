@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "self-test-${{ github.ref }}"
-  cancel-in-progress: true
+  group: "self-test-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -66,7 +66,7 @@ jobs:
       - name: Check shell syntax
         run: |
           shopt -s nullglob
-          bash -n action.sh test/*.sh
+          bash -n action.sh .github/scripts/*.sh test/*.sh
 
       - name: ShellCheck
         run: |
@@ -75,16 +75,22 @@ jobs:
             echo "::error::shellcheck is not installed on this runner"
             exit 1
           }
-          shellcheck action.sh test/*.sh
+          shellcheck action.sh .github/scripts/*.sh test/*.sh
 
       - name: Assert failure paths annotate
         run: ./test/failure-annotations.sh
+
+      - name: Assert download trust boundaries
+        run: ./test/download-boundaries.sh
 
       - name: Assert strict provenance behavior
         run: ./test/strict-provenance.sh
 
       - name: Assert no-repo-config behavior
         run: ./test/no-repo-config.sh
+
+      - name: Assert release gating behavior
+        run: ./test/release-gating.sh
 
   # Every runner label README lists as supported. Keep the two in step: a
   # label belongs in one of these matrices or it does not belong in the table.
@@ -113,10 +119,11 @@ jobs:
 
       - name: Run local pinprick action
         id: run_pinprick
-        uses: ./
+        uses: $/
         with:
           advanced-security: false
           fail-on-findings: false
+          no-repo-config: true
           path: .
 
       - name: Assert clean exit code
@@ -146,10 +153,11 @@ jobs:
 
       - name: Run local pinprick action
         id: run_pinprick
-        uses: ./
+        uses: $/
         with:
           advanced-security: false
           fail-on-findings: false
+          no-repo-config: true
           path: .
 
       - name: Assert clean exit code
@@ -193,7 +201,7 @@ jobs:
 
       - name: Findings succeed by default
         id: findings_default
-        uses: ./
+        uses: $/
         with:
           advanced-security: false
           fail-on-findings: false
@@ -210,7 +218,7 @@ jobs:
       - name: Findings fail when requested
         id: findings_fail
         continue-on-error: true
-        uses: ./
+        uses: $/
         with:
           advanced-security: false
           fail-on-findings: true
@@ -235,15 +243,32 @@ jobs:
           TOML
           printf 'path=%s\n' "${fixture}" >> "${GITHUB_OUTPUT}"
 
-      - name: Repository config suppresses findings
-        id: findings_with_repo_config
-        uses: ./
+      - name: Repository config is ignored by default
+        id: findings_without_repo_config
+        uses: $/
         with:
           advanced-security: false
           fail-on-findings: false
           path: ${{ steps.repo_config_fixture.outputs.path }}
 
-      - name: Assert repository config behavior
+      - name: Assert secure repository-config default
+        env:
+          OUTCOME: ${{ steps.findings_without_repo_config.outcome }}
+          EXIT_CODE: ${{ steps.findings_without_repo_config.outputs['exit-code'] }}
+        run: |
+          test "${OUTCOME}" = "success"
+          test "${EXIT_CODE}" = "1"
+
+      - name: Trusted repository config can suppress findings
+        id: findings_with_repo_config
+        uses: $/
+        with:
+          advanced-security: false
+          fail-on-findings: false
+          no-repo-config: false
+          path: ${{ steps.repo_config_fixture.outputs.path }}
+
+      - name: Assert repository config opt-in behavior
         env:
           OUTCOME: ${{ steps.findings_with_repo_config.outcome }}
           EXIT_CODE: ${{ steps.findings_with_repo_config.outputs['exit-code'] }}
@@ -251,27 +276,10 @@ jobs:
           test "${OUTCOME}" = "success"
           test "${EXIT_CODE}" = "0"
 
-      - name: No-repo-config restores suppressed finding
-        id: findings_no_repo_config
-        uses: ./
-        with:
-          advanced-security: false
-          fail-on-findings: false
-          no-repo-config: true
-          path: ${{ steps.repo_config_fixture.outputs.path }}
-
-      - name: Assert repository config was ignored
-        env:
-          OUTCOME: ${{ steps.findings_no_repo_config.outcome }}
-          EXIT_CODE: ${{ steps.findings_no_repo_config.outputs['exit-code'] }}
-        run: |
-          test "${OUTCOME}" = "success"
-          test "${EXIT_CODE}" = "1"
-
       - name: Invalid version fails
         id: invalid_version
         continue-on-error: true
-        uses: ./
+        uses: $/
         with:
           version: invalid
           advanced-security: false
@@ -293,7 +301,7 @@ jobs:
       - name: Engine error fails
         id: engine_error
         continue-on-error: true
-        uses: ./
+        uses: $/
         with:
           advanced-security: true
           fail-on-findings: false
@@ -325,10 +333,11 @@ jobs:
 
       - name: Run local pinprick action
         id: run_pinprick
-        uses: ./
+        uses: $/
         with:
           advanced-security: true
           fail-on-findings: false
+          no-repo-config: true
           path: .
 
       - name: Assert SARIF content and output

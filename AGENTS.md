@@ -17,9 +17,9 @@ acknowledgement in `README.md` and `action.sh`.
 
 ## Required checks
 
-- Run `just check` before pushing: diff hygiene (`git diff --check`), workflow
-  audit (`zizmor`), action supply-chain audit (`pinprick audit .`), and the
-  README link check (`lychee`).
+- Run `just check` before pushing: diff hygiene (`git diff --check`), shell
+  syntax and ShellCheck, every hermetic test, workflow audit (`zizmor`), action
+  supply-chain audit (`pinprick audit .`), and documentation links (`lychee`).
 - Run `just install-hooks` once per clone so DCO sign-off and the pre-push gate
   are active.
 - After changing `action.sh`, keep it `shellcheck`-clean and re-check the
@@ -35,12 +35,17 @@ acknowledgement in `README.md` and `action.sh`.
   runs `pinprick audit`, translating exit codes into step results.
 - `README.md`: usage, inputs, outputs, permissions, and exit behavior.
 - `RELEASING.md`: automated and manual release procedures.
+- `SECURITY.md`: private vulnerability-reporting routes and support policy.
+- `.github/scripts/`: locally tested release-contract and self-test gates.
+- `test/download-boundaries.sh`: hermetic transport and credential-scope checks.
 - `test/failure-annotations.sh`: hermetic shim harness asserting that
   action.sh failure paths emit visible `::error` annotations.
 - `test/strict-provenance.sh`: hermetic shim harness asserting fail-open and
   fail-closed provenance behavior.
 - `test/no-repo-config.sh`: hermetic shim harness asserting that the
   no-repo-config input is validated and forwarded.
+- `test/release-gating.sh`: hermetic release-validation and exact-workflow-run
+  gate checks.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: README link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo and
@@ -52,9 +57,12 @@ acknowledgement in `README.md` and `action.sh`.
 - `.github/workflows/release-manual.yml`: dispatch-only release path for
   wrapper changes; conventions in `RELEASING.md`.
 - `.github/workflows/codeql.yml`: actions CodeQL analysis.
-- `.github/workflows/link-check.yml`: weekly README link check.
+- `.github/workflows/link-check.yml`: weekly fleet-rendered documentation link check.
 - `.github/workflows/zizmor.yml`: GitHub Actions security audit.
+- `.github/workflows/fleet-guard.yml`: verifies fleet-managed policy surfaces.
 - `.github/dependabot.yml`: `github-actions` version updates.
+- `.fleet.yml`: fleet-rendered effective configuration; change its canonical
+  `fleet/repos/pinprick-action.yml` source in the hub, not this copy.
 - `justfile`, `.githooks/`, `.editorconfig`, `.gitignore`: local tooling and
   hygiene shared across the estate.
 - `CLAUDE.md`: compatibility pointer for Claude Code; keep it as `@AGENTS.md`.
