@@ -23,10 +23,13 @@ jobs:
     name: Release automated engine bump
     runs-on: ubuntu-slim
     timeout-minutes: 25
+    environment:
+      name: release
+      deployment: false
     permissions:
       actions: read # required to wait for this commit's Self-test workflow run
       checks: read # required to verify the bump PR's required checks
-      contents: write # required to create tags and GitHub releases
+      contents: read # required to validate the release source and engine release
       pull-requests: read # required to validate the merged bump PR
     steps:
       - name: Checkout repository
@@ -193,11 +196,22 @@ jobs:
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "create=${CREATE}" >> "${GITHUB_OUTPUT}"
 
+      - name: Mint release token
+        id: release-token
+        if: steps.pr.outputs.eligible == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Create action release tag
         if: steps.pr.outputs.eligible == 'true' && steps.tag.outputs.create == 'true'
         env:
           COMMIT_SHA: ${{ github.sha }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
@@ -209,7 +223,7 @@ jobs:
         if: steps.pr.outputs.eligible == 'true'
         env:
           ENGINE_VERSION: ${{ steps.bump.outputs.engine_version }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
