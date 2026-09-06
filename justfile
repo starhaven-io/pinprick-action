@@ -19,8 +19,10 @@ check:
     }
     run diff git diff --check
     shopt -s nullglob
-    shell_files=(action.sh test/*.sh)
+    shell_files=(action.sh .github/scripts/*.sh .githooks/* test/*.sh)
+    python_files=(.github/scripts/*.py)
     run shell-syntax bash -n "${shell_files[@]}"
+    run python-syntax python3 -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(path).read_text(encoding="utf-8"), filename=path) for path in sys.argv[1:]]' "${python_files[@]}"
     if command -v shellcheck &>/dev/null; then
         run shellcheck shellcheck "${shell_files[@]}"
     else
@@ -40,7 +42,7 @@ check:
         skip pinprick-audit pinprick pinprick
     fi
     if command -v lychee &>/dev/null; then
-        run lychee lychee --config lychee.toml README.md RELEASING.md
+        run lychee lychee --config lychee.toml README.md RELEASING.md SECURITY.md
     else
         skip lychee lychee lychee
     fi
@@ -66,7 +68,7 @@ pinprick-audit:
 
 # Check README links
 lychee:
-    lychee --config lychee.toml README.md RELEASING.md
+    lychee --config lychee.toml README.md RELEASING.md SECURITY.md
 
 # Setup
 

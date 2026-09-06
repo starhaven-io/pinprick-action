@@ -37,7 +37,7 @@ cat > "${SANDBOX}/metadata.json" <<JSON
   "assets": [
     {
       "name": "pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz",
-      "browser_download_url": "https://example.invalid/pinprick.tar.gz",
+      "browser_download_url": "https://github.com/starhaven-io/pinprick/releases/download/v99.0.0/pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz",
       "digest": "sha256:${ARCHIVE_SHA}"
     }
   ]
@@ -95,6 +95,24 @@ fail() {
     cat "${SANDBOX}/stdout.log" "${SANDBOX}/stderr.log" >&2
     exit 1
 }
+
+default_value="$(python3 - "${REPO_ROOT}/action.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+action = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(
+    r'(?ms)^  no-repo-config:\n(?:    [^\n]*\n)*?    default: "(true|false)"$',
+    action,
+)
+if not match:
+    raise SystemExit("no-repo-config default not found")
+print(match.group(1))
+PY
+)"
+[[ "${default_value}" == "true" ]] || fail "action metadata default is not secure"
+echo "ok: action metadata ignores repository config by default"
 
 exitcode="$(run_action true)"
 [[ "${exitcode}" -eq 0 ]] || fail "enabled input exited ${exitcode}"

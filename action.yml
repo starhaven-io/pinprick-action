@@ -21,6 +21,10 @@ inputs:
     description: Upload SARIF results to GitHub code scanning.
     required: false
     default: "true"
+  sarif-category:
+    description: Code scanning category for this upload. Set a unique value for each invocation in the same workflow.
+    required: false
+    default: "pinprick"
   fail-on-findings:
     description: Fail the workflow when pinprick reports findings.
     required: false
@@ -30,9 +34,9 @@ inputs:
     required: false
     default: "false"
   no-repo-config:
-    description: Ignore the scanned repository's .pinprick.toml and audit with the global config or defaults. Use when auditing repositories you do not control, so their config cannot suppress findings.
+    description: Ignore the scanned repository's .pinprick.toml and audit with the global config or defaults. Defaults to true so pull requests cannot suppress their own findings; set false only when repository policy is trusted.
     required: false
-    default: "false"
+    default: "true"
 
 outputs:
   exit-code:
@@ -66,7 +70,7 @@ runs:
       uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
       with:
         sarif_file: ${{ steps.run-pinprick.outputs.sarif-file }}
-        category: pinprick
+        category: ${{ inputs.sarif-category }}
 
     - name: Fail on pinprick findings
       if: ${{ inputs.fail-on-findings == 'true' && steps.run-pinprick.outputs.exit-code == '1' }}

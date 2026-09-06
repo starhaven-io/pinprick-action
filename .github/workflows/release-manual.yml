@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag to create, e.g. v0.4.4
+        description: Release tag to create, e.g. v0.6.0
         required: true
         type: string
       notes:
@@ -31,9 +31,9 @@ jobs:
   release:
     name: Release wrapper changes
     runs-on: ubuntu-slim
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
-      checks: read # required to verify the released commit's conclusion check
+      actions: read # required to wait for the released commit's Self-test workflow run
       contents: write # required to create tags and GitHub releases
     steps:
       - name: Checkout repository
@@ -46,8 +46,8 @@ jobs:
       - name: Validate release request
         id: request
         env:
-          COMMIT_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ inputs.notes }}
           REF: ${{ github.ref }}
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ inputs.version }}
@@ -57,8 +57,13 @@ jobs:
             exit 1
           fi
 
-          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::'version' must look like v0.4.4"
+          if [[ ! "${TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::'version' must be a canonical tag like v0.6.0"
+            exit 1
+          fi
+
+          if [[ -z "${NOTES//[[:space:]]/}" || "${NOTES}" == *$'\n'* || "${NOTES}" == *$'\r'* ]]; then
+            echo "::error::'notes' must be a non-empty single-line summary"
             exit 1
           fi
 
@@ -68,8 +73,9 @@ jobs:
           fi
 
           LATEST_TAG=$(
-            git tag --list \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            gh api --paginate "repos/${REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+              | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
               | sort -V \
               | tail -1 || true
           )
@@ -79,14 +85,6 @@ jobs:
               echo "::error::${TAG} does not sort above the latest release ${LATEST_TAG}"
               exit 1
             fi
-          fi
-
-          CONCLUSION=$(gh api \
-            "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?check_name=conclusion" \
-            --jq '[.check_runs[] | select(.conclusion == "success")] | length')
-          if [[ "${CONCLUSION}" == "0" ]]; then
-            echo "::error::The conclusion check has not succeeded for ${COMMIT_SHA}"
-            exit 1
           fi
 
           ENGINE_VERSION=$(python3 - <<'PY'
@@ -99,7 +97,9 @@ jobs:
           pattern = re.compile(
               r'(?ms)^inputs:\n(?:(?!^\S).)*?^  version:\n'
               r'(?:    [^\n]*\n)*?^    default: "'
-              r'([0-9]+\.[0-9]+\.[0-9]+)"$'
+              r'((?:0|[1-9][0-9]*)\.'
+              r'(?:0|[1-9][0-9]*)\.'
+              r'(?:0|[1-9][0-9]*))"$'
           )
           match = pattern.search(action)
           if not match:
@@ -109,6 +109,13 @@ jobs:
           )
 
           echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for released commit self-test
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: .github/scripts/wait-for-self-test.sh
 
       - name: Create action tag and release
         # Let gh create the tag at the validated commit. --verify-tag would
