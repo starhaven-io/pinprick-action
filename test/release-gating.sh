@@ -314,4 +314,25 @@ if contract not in workflow:
 PY
 echo "ok: Self-test push runs are SHA-scoped and cannot be cancelled"
 
+ruby -ryaml -e '
+  steps = YAML.load_file(ARGV.fetch(0)).fetch("jobs").fetch("release").fetch("steps")
+  puts steps.find { |step| step["name"] == "Validate release request" }.fetch("run")
+' "${REPO_ROOT}/.github/workflows/release-manual.yml" > "${SANDBOX}/validate-request.sh"
+mkdir -p "${SANDBOX}/release-shims"
+printf '#!/bin/sh\nexit 23\n' > "${SANDBOX}/release-shims/gh"
+printf '#!/bin/sh\nexit 1\n' > "${SANDBOX}/release-shims/git"
+chmod +x "${SANDBOX}/release-shims/gh" "${SANDBOX}/release-shims/git"
+request_status=0
+env -i PATH="${SANDBOX}/release-shims:${PATH}" \
+    REF=refs/heads/main TAG=v999.0.0 NOTES="Wrapper fix" \
+    REPOSITORY=example/project GITHUB_OUTPUT="${SANDBOX}/request-output" \
+    bash -euo pipefail "${SANDBOX}/validate-request.sh" \
+    > "${SANDBOX}/request-stdout" 2> "${SANDBOX}/request-stderr" \
+    || request_status="$?"
+if [[ "${request_status}" -ne 23 || -s "${SANDBOX}/request-output" ]]; then
+    echo "FAIL release history: an API failure did not stop request validation" >&2
+    exit 1
+fi
+echo "ok: manual release validation stops on release-history API failure"
+
 echo "release gating behavior holds"

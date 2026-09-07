@@ -1,9 +1,7 @@
 name: Release (manual)
 
-# Wrapper-only changes (action.sh fixes, workflow or doc work) have no
-# automated release path: release.yml fires solely for starhaven-bot engine
-# bumps. This dispatch-only workflow covers the gap with the same tag and
-# release conventions. See RELEASING.md.
+# Wrapper-only changes need an explicit release: release.yml publishes only
+# validated starhaven-bot engine bumps. See RELEASING.md.
 
 on:
   workflow_dispatch:
@@ -75,9 +73,12 @@ jobs:
             exit 1
           fi
 
-          LATEST_TAG=$(
+          RELEASE_TAGS=$(
             gh api --paginate "repos/${REPOSITORY}/releases?per_page=100" \
-              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
+          )
+          LATEST_TAG=$(
+            printf '%s\n' "${RELEASE_TAGS}" \
               | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
               | sort -V \
               | tail -1 || true

@@ -8,11 +8,7 @@
 
 set -euo pipefail
 
-# Emit a GitHub Actions workflow command: note <level> <message...>
-# Writes to stderr, which the runner also scans for workflow commands, so
-# messages stay visible inside command substitutions that capture stdout.
-# Percent signs and newlines are escaped per the workflow-command data
-# convention so a message cannot truncate itself or inject a second command.
+# Keep annotations visible in command substitutions and escape command delimiters.
 note() {
     local message="${*:2}"
     message="${message//'%'/%25}"
@@ -50,12 +46,10 @@ die() {
     exit 1
 }
 
-# True when COMMAND resolves on PATH.
 have() {
     command -v "${1}" >/dev/null 2>&1
 }
 
-# Append key=value to the step's outputs.
 set_output() {
     printf '%s=%s\n' "${1}" "${2}" >> "${GITHUB_OUTPUT}"
 }
@@ -348,10 +342,9 @@ install_pinprick() {
         die "'version' must be 'latest' or an exact X.Y.Z version"
     fi
 
-    local workdir="${RUNNER_TEMP}/pinprick-action"
+    local workdir="${3}"
     local metadata="${workdir}/release.json"
     local archive="${workdir}/pinprick.tar.gz"
-    mkdir -p "${workdir}"
 
     if ! github_curl "${api_url}" > "${metadata}"; then
         die "Could not fetch pinprick release metadata for '${version}'"
@@ -417,12 +410,14 @@ main() {
     have curl || die "Cannot install pinprick without curl"
     have tar || die "Cannot install pinprick without tar"
 
-    local target sarif_file exitcode
+    local target sarif_file exitcode workdir
     target="$(target_triple)"
     note debug "resolved runner target ${target}"
 
-    install_pinprick "${PPA_VERSION}" "${target}"
-    sarif_file="${RUNNER_TEMP}/pinprick.sarif"
+    workdir="$(mktemp -d "${RUNNER_TEMP%/}/pinprick-action.XXXXXX")" \
+        || die "Could not create the pinprick invocation directory"
+    install_pinprick "${PPA_VERSION}" "${target}" "${workdir}"
+    sarif_file="${workdir}/pinprick.sarif"
 
     local audit_args=(audit)
     if [[ "${PPA_NO_REPO_CONFIG}" == "true" ]]; then

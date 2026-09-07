@@ -290,7 +290,8 @@ expect_fence_closed_before_error() {
 
 expect_fence_absent_from_sarif() {
     run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" PPA_ADVANCED_SECURITY="true"
-    local sarif="${SANDBOX}/tmp/pinprick.sarif"
+    local sarif
+    sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
 
     if [[ ! -s "${sarif}" ]]; then
         echo "FAIL sarif fence: no SARIF file was written" >&2

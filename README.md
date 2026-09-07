@@ -131,7 +131,7 @@ build.
 | `strict-provenance` | `false` | Require provenance verification to run: fail instead of warn when the attestation cannot be checked. |
 | `no-repo-config` | `true` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults, preventing a pull request from suppressing its own findings. |
 
-pinprick currently supports severity filtering through `.pinprick.toml`, not an
+pinprick supports severity filtering through `.pinprick.toml`, not an
 audit CLI flag, so this action does not expose a `min-severity` input.
 
 Set `no-repo-config: false` only when you deliberately trust and want to apply
@@ -145,6 +145,9 @@ the contributor's workflow findings.
 | --- | --- |
 | `exit-code` | pinprick audit exit code. |
 | `sarif-file` | Filepath to usable SARIF results when `advanced-security: true` and the audit exits 0 or 1. |
+
+Each invocation keeps its download and SARIF output in a separate runner
+temporary directory, so later invocations preserve earlier `sarif-file` outputs.
 
 ## Permissions
 
@@ -201,7 +204,8 @@ In Advanced Security mode, SARIF upload happens before optional
 
 Each release of this action pins a specific pinprick version through the
 `version` default, so a workflow pinned to a given action ref installs the same
-pinprick build on every run. To move to a newer pinprick, bump the action to a
+pinprick version on every run. Each download is verified as described above.
+To move to a newer pinprick, bump the action to a
 release whose default targets it, or set `version` yourself (including
 `latest`, if you accept non-deterministic installs).
 
