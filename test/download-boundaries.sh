@@ -10,7 +10,7 @@ SANDBOX="$(mktemp -d "${TEMP_ROOT%/}/pinprick-action-download.XXXXXX")"
 trap 'rm -rf "${SANDBOX}"' EXIT
 
 SHIMS="${SANDBOX}/bin"
-mkdir -p "${SHIMS}" "${SANDBOX}/release"
+mkdir -p "${SHIMS}" "${SANDBOX}/release" "${SANDBOX}/runner-temp"
 # Prefer GNU tar when available so macOS development runs exercise Linux's
 # exact archive-member matching.
 if command -v gtar >/dev/null 2>&1; then
@@ -24,6 +24,7 @@ if [[ "${1:-}" == "--version" ]]; then
     exit 0
 fi
 if [[ "${1:-}" == "audit" ]]; then
+    printf '%s\n' "${PPA_PATH}"
     exit 0
 fi
 exit 2
@@ -91,27 +92,32 @@ exit 1
 SHIM
 chmod +x "${SHIMS}/gh"
 
-exitcode=0
-env -i \
-    PATH="${SHIMS}:/usr/bin:/bin" \
-    RUNNER_TEMP="${SANDBOX}/runner-temp" \
-    RUNNER_OS="Linux" \
-    RUNNER_ARCH="X64" \
-    GITHUB_OUTPUT="${SANDBOX}/output" \
-    GITHUB_TOKEN="test-token" \
-    SHIM_METADATA="${SANDBOX}/metadata.json" \
-    SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
-    SHIM_API_LOG="${SANDBOX}/api.log" \
-    SHIM_ASSET_LOG="${SANDBOX}/asset.log" \
-    PPA_VERSION="99.0.0" \
-    PPA_PATH="." \
-    PPA_ADVANCED_SECURITY="false" \
-    PPA_FAIL_ON_FINDINGS="false" \
-    PPA_STRICT_PROVENANCE="true" \
-    PPA_NO_REPO_CONFIG="true" \
-    bash "${REPO_ROOT}/action.sh" \
-    > "${SANDBOX}/stdout.log" 2> "${SANDBOX}/stderr.log" \
-    || exitcode="$?"
+run_action() {
+    : > "${SANDBOX}/output"
+    exitcode=0
+    env -i \
+        PATH="${SHIMS}:/usr/bin:/bin" \
+        RUNNER_TEMP="${SANDBOX}/runner-temp" \
+        RUNNER_OS="Linux" \
+        RUNNER_ARCH="X64" \
+        GITHUB_OUTPUT="${SANDBOX}/output" \
+        GITHUB_TOKEN="test-token" \
+        SHIM_METADATA="${SANDBOX}/metadata.json" \
+        SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
+        SHIM_API_LOG="${SANDBOX}/api.log" \
+        SHIM_ASSET_LOG="${SANDBOX}/asset.log" \
+        PPA_VERSION="99.0.0" \
+        PPA_PATH="${1}" \
+        PPA_ADVANCED_SECURITY="true" \
+        PPA_FAIL_ON_FINDINGS="false" \
+        PPA_STRICT_PROVENANCE="true" \
+        PPA_NO_REPO_CONFIG="true" \
+        bash "${REPO_ROOT}/action.sh" \
+        > "${SANDBOX}/stdout.log" 2> "${SANDBOX}/stderr.log" \
+        || exitcode="$?"
+}
+
+run_action first-audit
 
 if [[ "${exitcode}" -ne 0 ]]; then
     echo "FAIL download boundaries: action exited ${exitcode}" >&2
@@ -119,7 +125,8 @@ if [[ "${exitcode}" -ne 0 ]]; then
     exit 1
 fi
 
-install_dir="${SANDBOX}/runner-temp/pinprick-action/99.0.0"
+install_dirs=("${SANDBOX}/runner-temp"/pinprick-action.*/99.0.0)
+install_dir="${install_dirs[0]}"
 if [[ ! -x "${install_dir}/pinprick" ]]; then
     echo "FAIL download boundaries: ./pinprick was not extracted" >&2
     exit 1
@@ -171,5 +178,17 @@ grep -qxF "https://github.com/starhaven-io/pinprick/releases/download/v99.0.0/pi
         exit 1
     }
 echo "ok: release metadata and archive requests use canonical endpoints"
+
+first_sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+run_action second-audit
+second_sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+if [[ "${exitcode}" -ne 0 || -z "${first_sarif}" || -z "${second_sarif}" \
+    || "${first_sarif}" == "${second_sarif}" ]]; then
+    echo "FAIL invocation isolation: separate audits did not produce separate outputs" >&2
+    exit 1
+fi
+grep -qxF first-audit "${first_sarif}"
+grep -qxF second-audit "${second_sarif}"
+echo "ok: later invocations preserve earlier SARIF outputs"
 
 echo "download boundary behavior holds"

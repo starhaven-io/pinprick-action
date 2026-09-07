@@ -16,8 +16,9 @@ involved.
 
 ## Manual: wrapper changes
 
-Changes to `action.sh`, workflows, or docs never trigger `release.yml`. To
-release them:
+Wrapper changes require the manual release workflow. Changes to `README.md`
+also start `release.yml`, but it publishes only a validated engine bump. To
+release wrapper changes:
 
 1. Merge the change to `main` through a PR and wait for the `conclusion`
    check to succeed on the merge commit.
@@ -29,7 +30,7 @@ release them:
      inputs or outputs changed behavior). Before v1, observable behavior changes
      such as changing an input default require a minor-version bump.
    - `notes`: a one-line summary of the wrapper changes.
-3. The workflow verifies the request, independently rechecks the exact
+3. The workflow verifies the request and release history, rechecks the exact
    `conclusion` job in the push-triggered `Self-test` run for the head of `main`,
    then tags that commit and creates the release with the pinned engine version
    appended to the notes.
