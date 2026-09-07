@@ -297,6 +297,15 @@ assert_waits_before_publication release.yml "Create action release tag"
 assert_waits_before_publication release-manual.yml "Create action tag and release"
 echo "ok: both release paths gate publication on the exact Self-test conclusion"
 
+ruby -ryaml -e '
+  ARGV.each do |path|
+    concurrency = YAML.load_file(path).fetch("concurrency")
+    expected = {"group" => "release", "cancel-in-progress" => false, "queue" => "max"}
+    abort "release requests must be serialized without replacing pending requests" unless concurrency == expected
+  end
+' "${REPO_ROOT}/.github/workflows/release.yml" "${REPO_ROOT}/.github/workflows/release-manual.yml"
+echo "ok: both release paths retain pending release requests"
+
 python3 - "${REPO_ROOT}/.github/workflows/self-test.yml" <<'PY'
 from pathlib import Path
 import sys

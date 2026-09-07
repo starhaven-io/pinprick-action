@@ -32,7 +32,7 @@ check:
         run "$(basename "${test_script}")" "${test_script}"
     done
     if command -v zizmor &>/dev/null; then
-        run audit zizmor --persona auditor .
+        run audit zizmor --strict-collection --persona auditor .
     else
         skip audit zizmor zizmor
     fi
