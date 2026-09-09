@@ -123,7 +123,7 @@ build.
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `version` | `0.23.1` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.23.1`. |
+| `version` | `0.24.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.24.0`. |
 | `path` | `.` | Repository path to scan. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `sarif-category` | `pinprick` | Code scanning category for the upload. Use a unique value for each invocation in the same workflow. |
