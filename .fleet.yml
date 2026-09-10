@@ -2,6 +2,11 @@ schema: 1
 visibility: "public"
 license: "mit"
 params:
+  conclusion:
+    workflow: ".github/workflows/self-test.yml"
+    audit-jobs: ["validate", "console", "contract", "sarif"]
+    noncritical-jobs:
+      console_preview: "preview images report compatibility without gating supported release images"
   dependabot:
     - package-ecosystem: "github-actions"
       group: "github-actions"
