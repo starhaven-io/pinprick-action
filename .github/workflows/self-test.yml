@@ -364,8 +364,13 @@ jobs:
           CONSOLE: ${{ needs.console.result }}
           CONTRACT: ${{ needs.contract.result }}
           SARIF: ${{ needs.sarif.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           test "${VALIDATE}" = "success"
           test "${CONSOLE}" = "success"
           test "${CONTRACT}" = "success"
-          [[ "${SARIF}" == "success" || "${SARIF}" == "skipped" ]]
+          case "${EVENT_NAME}" in
+            pull_request) test "${SARIF}" = "skipped" ;;
+            push | workflow_dispatch) test "${SARIF}" = "success" ;;
+            *) echo "::error::Unexpected self-test event."; exit 1 ;;
+          esac
