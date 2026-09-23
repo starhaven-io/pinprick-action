@@ -77,20 +77,11 @@ jobs:
           }
           shellcheck action.sh .github/scripts/*.sh test/*.sh
 
-      - name: Assert failure paths annotate
-        run: ./test/failure-annotations.sh
-
-      - name: Assert download trust boundaries
-        run: ./test/download-boundaries.sh
-
-      - name: Assert strict provenance behavior
-        run: ./test/strict-provenance.sh
-
-      - name: Assert no-repo-config behavior
-        run: ./test/no-repo-config.sh
-
-      - name: Assert release gating behavior
-        run: ./test/release-gating.sh
+      - name: Run hermetic tests
+        run: |
+          for test_script in test/*.sh; do
+            "${test_script}"
+          done
 
   # Every runner label README lists as supported. Keep the two in step: a
   # label belongs in one of these matrices or it does not belong in the table.
@@ -124,6 +115,9 @@ jobs:
           advanced-security: false
           fail-on-findings: false
           no-repo-config: true
+          # Consumers on a supported image that cannot verify provenance get
+          # only a warning, so the gating matrix must fail instead.
+          strict-provenance: true
           path: .
 
       - name: Assert clean exit code

@@ -45,6 +45,8 @@ acknowledgement in `README.md` and `action.sh`.
   no-repo-config input is validated and forwarded.
 - `test/release-gating.sh`: hermetic release-validation and exact-workflow-run
   gate checks.
+- `test/conclusion-gating.sh`: evaluates self-test's `conclusion` result logic
+  for each triggering event.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: README link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo and
