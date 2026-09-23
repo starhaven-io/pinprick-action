@@ -22,9 +22,7 @@ acknowledgement in `README.md` and `action.sh`.
   supply-chain audit (`pinprick audit .`), and documentation links (`lychee`).
 - Run `just install-hooks` once per clone so DCO sign-off and the pre-push gate
   are active.
-- After changing `action.sh`, keep it `shellcheck`-clean and re-check the
-  exit-code mapping by hand: 0 stays success, 1 stays success unless
-  `fail-on-findings`, and 2+ fails.
+- After changing `action.sh`, keep it `shellcheck`-clean.
 - Confirm `git status --short` shows only intended changes.
 
 ## Repository structure
@@ -39,7 +37,8 @@ acknowledgement in `README.md` and `action.sh`.
 - `.github/scripts/`: locally tested release-contract and self-test gates.
 - `test/download-boundaries.sh`: hermetic transport and credential-scope checks.
 - `test/failure-annotations.sh`: hermetic shim harness asserting that
-  action.sh failure paths emit visible `::error` annotations.
+  action.sh failure paths emit visible `::error` annotations and that the
+  exit-code contract and SARIF-before-failure ordering hold.
 - `test/strict-provenance.sh`: hermetic shim harness asserting fail-open and
   fail-closed provenance behavior.
 - `test/no-repo-config.sh`: hermetic shim harness asserting that the
