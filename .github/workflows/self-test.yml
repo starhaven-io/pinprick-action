@@ -343,11 +343,21 @@ jobs:
           jq -e '.runs[0].tool.driver.name == "pinprick"' "${SARIF_FILE}"
           jq -e '(.runs[0].results | type) == "array"' "${SARIF_FILE}"
 
+  zizmor:
+    name: Workflow security audit
+    permissions:
+      contents: read
+    # Direct mode: fork pull requests cannot upload SARIF; zizmor.yml uploads it from main.
+    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@5f3d865798c6a3b26963526239b2a03413e34830 # v2026.09.16.1
+    with:
+      advanced-security: false
+      timeout-minutes: 10
+
   conclusion:
     name: conclusion
     # console_preview is deliberately absent: preview images report but do not
     # gate. needs.console.result aggregates every leg of that matrix.
-    needs: [validate, console, contract, sarif]
+    needs: [validate, console, contract, sarif, zizmor]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     if: always()
@@ -358,11 +368,13 @@ jobs:
           CONSOLE: ${{ needs.console.result }}
           CONTRACT: ${{ needs.contract.result }}
           SARIF: ${{ needs.sarif.result }}
+          ZIZMOR: ${{ needs.zizmor.result }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           test "${VALIDATE}" = "success"
           test "${CONSOLE}" = "success"
           test "${CONTRACT}" = "success"
+          test "${ZIZMOR}" = "success"
           case "${EVENT_NAME}" in
             pull_request) test "${SARIF}" = "skipped" ;;
             push | workflow_dispatch) test "${SARIF}" = "success" ;;
