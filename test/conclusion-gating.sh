@@ -10,7 +10,7 @@ SCRIPT=$(ruby -ryaml -e '
 
 concludes() {
     env -i PATH="${PATH}" \
-        VALIDATE="${1}" CONSOLE="${2}" CONTRACT="${3}" SARIF="${4}" EVENT_NAME="${5}" \
+        VALIDATE="${1}" CONSOLE="${2}" CONTRACT="${3}" ZIZMOR="${4}" SARIF="${5}" EVENT_NAME="${6}" \
         bash -euo pipefail -c "${SCRIPT}" >/dev/null 2>&1
 }
 
@@ -21,18 +21,20 @@ rejects() {
     fi
 }
 
-concludes success success success skipped pull_request
-concludes success success success success push
-concludes success success success success workflow_dispatch
+concludes success success success success skipped pull_request
+concludes success success success success success push
+concludes success success success success success workflow_dispatch
 
 for result in failure cancelled skipped; do
-    rejects "${result}" success success skipped pull_request
-    rejects success "${result}" success skipped pull_request
-    rejects success success "${result}" skipped pull_request
+    rejects "${result}" success success success skipped pull_request
+    rejects success "${result}" success success skipped pull_request
+    rejects success success "${result}" success skipped pull_request
+    rejects success success success "${result}" skipped pull_request
+    rejects success success success "${result}" success push
 done
 
-rejects success success success success pull_request
-rejects success success success skipped push
-rejects success success success skipped unknown
+rejects success success success success success pull_request
+rejects success success success success skipped push
+rejects success success success success skipped unknown
 
-echo "ok: conclusion distinguishes required SARIF from the pull-request skip"
+echo "ok: conclusion requires the workflow audit and distinguishes required SARIF from the pull-request skip"

@@ -49,8 +49,9 @@ acknowledgement in `README.md` and `action.sh`.
   for each triggering event.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: README link-check configuration.
-- `.github/workflows/self-test.yml`: runs the action against this repo and
-  exposes the aggregate `conclusion` check the org ruleset requires.
+- `.github/workflows/self-test.yml`: runs the action against this repo, gates
+  on the direct-mode zizmor workflow audit, and exposes the aggregate
+  `conclusion` check the org ruleset requires.
 - `.github/workflows/engine-latest.yml`: weekly `version: latest` canary for
   engine release-asset drift.
 - `.github/workflows/release.yml`: verifies merged starhaven-bot engine-version
