@@ -32,7 +32,9 @@ fence_engine_output() {
 
 unfence_engine_output() {
     [[ -n "${COMMAND_FENCE_TOKEN}" ]] || return 0
-    printf '::%s::\n' "${COMMAND_FENCE_TOKEN}" >&2
+    # The runner only honors a command at the start of a line, so unterminated
+    # engine output would otherwise swallow the resume token.
+    printf '\n::%s::\n' "${COMMAND_FENCE_TOKEN}" >&2
     COMMAND_FENCE_TOKEN=""
 }
 

