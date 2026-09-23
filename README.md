@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@bda965bf87209a4e5e0229b289de76dfd87dd2ed # v0.6.3
+        uses: starhaven-io/pinprick-action@a7914d669a5a3c940adf255867cbf6f910960edd # v0.6.4
         with:
           no-repo-config: true
 ```
@@ -86,7 +86,7 @@ jobs:
           persist-credentials: false
 
       - name: Run pinprick
-        uses: starhaven-io/pinprick-action@bda965bf87209a4e5e0229b289de76dfd87dd2ed # v0.6.3
+        uses: starhaven-io/pinprick-action@a7914d669a5a3c940adf255867cbf6f910960edd # v0.6.4
         with:
           advanced-security: false
           no-repo-config: true
@@ -100,7 +100,7 @@ checks for; bump the SHA when you adopt a newer release.
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@bda965bf87209a4e5e0229b289de76dfd87dd2ed # v0.6.3
+  uses: starhaven-io/pinprick-action@a7914d669a5a3c940adf255867cbf6f910960edd # v0.6.4
   with:
     fail-on-findings: true
 ```
@@ -182,7 +182,7 @@ condition into a hard failure:
 
 ```yaml
 - name: Run pinprick
-  uses: starhaven-io/pinprick-action@bda965bf87209a4e5e0229b289de76dfd87dd2ed # v0.6.3
+  uses: starhaven-io/pinprick-action@a7914d669a5a3c940adf255867cbf6f910960edd # v0.6.4
   with:
     strict-provenance: true
 ```
