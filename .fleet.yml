@@ -4,7 +4,7 @@ license: "mit"
 params:
   conclusion:
     workflow: ".github/workflows/self-test.yml"
-    audit-jobs: ["validate", "console", "contract", "sarif"]
+    audit-jobs: ["validate", "console", "contract", "sarif", "zizmor"]
     noncritical-jobs:
       console_preview: "preview images report compatibility without gating supported release images"
   dependabot:
