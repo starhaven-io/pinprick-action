@@ -348,7 +348,7 @@ jobs:
     permissions:
       contents: read
     # Direct mode: fork pull requests cannot upload SARIF; zizmor.yml uploads it from main.
-    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@d4d091998efd14cbd248589dea26ecffd9020d25 # v2026.10.02.1
+    uses: starhaven-io/.github/.github/workflows/reusable-zizmor.yml@2185685dd054ef65b23a025807ea86821f97a3d9 # v2026.10.03.1
     with:
       advanced-security: false
       timeout-minutes: 10
