@@ -48,7 +48,7 @@ acknowledgement in `README.md` and `action.sh`.
 - `test/conclusion-gating.sh`: evaluates self-test's `conclusion` result logic
   for each triggering event.
 - `LICENSE`: MIT, for this wrapper only.
-- `lychee.toml`: README link-check configuration.
+- `lychee.toml`: documentation link-check configuration.
 - `.github/workflows/self-test.yml`: runs the action against this repo, gates
   on the direct-mode zizmor workflow audit, and exposes the aggregate
   `conclusion` check the org ruleset requires.
@@ -79,8 +79,9 @@ acknowledgement in `README.md` and `action.sh`.
 3. Keep every action reference SHA-pinned with the version in a trailing comment;
    this action audits for exactly that. The
    `github/codeql-action/upload-sarif` pin in `action.yml` is one such reference.
-4. Keep the `version` input pinned by default for deterministic installs; bump it
-   deliberately per release rather than defaulting to `latest`.
+4. Keep the `version` input's default an exact engine release, never `latest`,
+   so installs stay deterministic. Bumps arrive as starhaven-bot
+   `chore/pin-pinprick-*` PRs, the only bumps `release.yml` publishes.
 5. Keep wrapper inputs namespaced as `PPA_*` in `action.yml` and `action.sh` so
    they never clash with pinprick's own environment variables.
 6. Verify the downloaded archive checksum before use; never skip the sha256 check
