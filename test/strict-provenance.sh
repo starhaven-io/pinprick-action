@@ -48,6 +48,17 @@ JSON
 }
 write_metadata 99.0.0 "${SANDBOX}/metadata.json"
 write_metadata 0.6.0 "${SANDBOX}/metadata-old.json"
+python3 - "${SANDBOX}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+for label, tag in (("array-tag", ["v99.0.0"]), ("newline-tag", "v99.0.0\n")):
+    metadata = json.loads((root / "metadata.json").read_text())
+    metadata["tag_name"] = tag
+    (root / f"metadata-node-{label}.json").write_text(json.dumps(metadata))
+PY
 printf '{"tag_name":"v99.0.0-rc.1","assets":[]}\n' \
     > "${SANDBOX}/metadata-node-prerelease.json"
 printf '{not-json\n' > "${SANDBOX}/metadata-node-invalid-json.json"
@@ -280,7 +291,7 @@ expect_success "node metadata parser fallback succeeds" \
     GITHUB_TOKEN="shim-token" \
     PPA_STRICT_PROVENANCE="true"
 
-for metadata_case in invalid-json invalid-assets prerelease no-digest wrong-url; do
+for metadata_case in invalid-json invalid-assets prerelease no-digest wrong-url array-tag newline-tag; do
     expect_error "node metadata parser rejects ${metadata_case}" \
         "Could not resolve a pinprick 99.0.0 release asset for x86_64-unknown-linux-gnu" \
         PATH="${NODE_SHIMS}" \

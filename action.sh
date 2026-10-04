@@ -184,7 +184,7 @@ if (!release || Array.isArray(release) || typeof release !== "object") {
   process.exit(1);
 }
 const tag = release.tag_name || "";
-const match = /^v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/.exec(tag);
+const match = typeof tag === "string" && /^v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/.exec(tag);
 if (!match) {
   console.error("release metadata tag_name must be a canonical vX.Y.Z version");
   process.exit(1);
