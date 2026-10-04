@@ -4,6 +4,3 @@
 max_concurrency = 20
 timeout = 20
 max_retries = 3
-
-# gnu.org can time out or block automated link checkers from hosted runners.
-exclude = ["^https://www\\.gnu\\.org/"]
