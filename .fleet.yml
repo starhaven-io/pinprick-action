@@ -2,7 +2,6 @@ schema: 1
 visibility: "public"
 license: "mit"
 params:
-  coderabbit: true
   conclusion:
     workflow: ".github/workflows/self-test.yml"
     audit-jobs: ["validate", "console", "contract", "sarif", "zizmor"]
