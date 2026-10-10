@@ -2,12 +2,16 @@ schema: 1
 visibility: "public"
 license: "mit"
 params:
+  renovate: true
   conclusion:
     workflow: ".github/workflows/self-test.yml"
     audit-jobs: ["validate", "console", "contract", "sarif", "zizmor"]
     noncritical-jobs:
       console_preview: "preview images report compatibility without gating supported release images"
   dependabot:
+    - package-ecosystem: "bundler"
+      group: "bundler-dependencies"
+      directory: "/"
     - package-ecosystem: "github-actions"
       group: "github-actions"
       directory: "/"
@@ -18,8 +22,8 @@ params:
     schedule: "0 14 * * 1"
     concurrency-group: "link-check"
   codeql:
-    languages: ["actions"]
-    paths: [".github/workflows/**", "action.yml"]
+    languages: ["actions", "ruby"]
+    paths: [".github/workflows/**", "action.yml", ".github/scripts/**", "test/**", "Gemfile", "Gemfile.lock", ".ruby-version"]
     runner: "ubuntu-slim"
     timeout-minutes: 10
     schedule: "0 13 * * 1"
