@@ -22,7 +22,7 @@ defaults:
 jobs:
   release:
     name: Release automated engine bump
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment:
       name: release
@@ -72,15 +72,18 @@ jobs:
           echo "eligible=true" >> "${GITHUB_OUTPUT}"
           echo "number=$(jq -r '.[0].number' <<< "${MATCHES}")" >> "${GITHUB_OUTPUT}"
 
+      - name: Set up Ruby
+        if: steps.pr.outputs.eligible == 'true'
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          bundler: none
+
       - name: Validate engine bump
         id: bump
         if: steps.pr.outputs.eligible == 'true'
         env:
           BEFORE_SHA: ${{ github.event.before }}
           COMMIT_SHA: ${{ github.sha }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          REPOSITORY: ${{ github.repository }}
         run: |
           if ! git cat-file -e "${BEFORE_SHA}^{commit}"; then
             echo "::error::Could not resolve the pre-push main commit ${BEFORE_SHA}"
@@ -97,13 +100,23 @@ jobs:
           git show "${BEFORE_SHA}:README.md" > "${RUNNER_TEMP}/README.before.md"
 
           ENGINE_VERSION=$(
-            .github/scripts/validate-engine-bump.py \
+            ruby .github/scripts/validate-engine-bump.rb \
               "${RUNNER_TEMP}/action.before.yml" \
               "${RUNNER_TEMP}/README.before.md" \
               action.yml \
               README.md
           )
 
+          echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify merged bump provenance
+        if: steps.pr.outputs.eligible == 'true'
+        env:
+          ENGINE_VERSION: ${{ steps.bump.outputs.engine_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
           EXPECTED_BRANCH="chore/pin-pinprick-${ENGINE_VERSION}"
           EXPECTED_TITLE="feat: pin pinprick ${ENGINE_VERSION} as the default version"
           PR=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
@@ -142,15 +155,13 @@ jobs:
             exit 1
           fi
 
-          echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
-
       - name: Wait for merge commit self-test
         if: steps.pr.outputs.eligible == 'true'
         env:
           COMMIT_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-        run: .github/scripts/wait-for-self-test.sh
+        run: ruby .github/scripts/wait-for-self-test.rb
 
       - name: Select action release tag
         id: tag
@@ -184,13 +195,7 @@ jobs:
               echo "::error::Could not find the latest action release tag"
               exit 1
             fi
-            TAG=$(python3 - "${LATEST_TAG}" <<'PY'
-          import sys
-
-          major, minor, patch = map(int, sys.argv[1][1:].split("."))
-          print(f"v{major}.{minor}.{patch + 1}")
-          PY
-            )
+            TAG=$(ruby -e 'major, minor, patch = ARGV.fetch(0).delete_prefix("v").split(".").map(&:to_i); puts "v#{major}.#{minor}.#{patch + 1}"' "${LATEST_TAG}")
             CREATE=true
           fi
 

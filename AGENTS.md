@@ -17,8 +17,10 @@ acknowledgement in `README.md` and `action.sh`.
 
 ## Required checks
 
-- Run `just check` before pushing: diff hygiene (`git diff --check`), shell
-  syntax and ShellCheck, every hermetic test, workflow audit (`zizmor`), action
+- Run `just setup` to install the locked test dependencies with the Ruby version
+  in `.ruby-version`.
+- Run `just check` before pushing: diff hygiene (`git diff --check`), Ruby and
+  shell syntax and ShellCheck, every hermetic test, workflow audit (`zizmor`), action
   supply-chain audit (`pinprick audit .`), and documentation links (`lychee`).
 - Run `just install-hooks` once per clone so DCO sign-off and the pre-push gate
   are active.
@@ -43,9 +45,9 @@ acknowledgement in `README.md` and `action.sh`.
   fail-closed provenance behavior.
 - `test/no-repo-config.sh`: hermetic shim harness asserting that the
   no-repo-config input is validated and forwarded.
-- `test/release-gating.sh`: hermetic release-validation and exact-workflow-run
+- `test/release_gating_test.rb`: hermetic release-validation and exact-workflow-run
   gate checks.
-- `test/conclusion-gating.sh`: evaluates self-test's `conclusion` result logic
+- `test/conclusion_gating_test.rb`: evaluates self-test's `conclusion` result logic
   for each triggering event.
 - `LICENSE`: MIT, for this wrapper only.
 - `lychee.toml`: documentation link-check configuration.

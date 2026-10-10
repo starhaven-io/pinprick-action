@@ -2,59 +2,15 @@
 
 # Run all checks
 check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    failed=0
-    skipped=()
-    run() {
-        echo "--- $1 ---"
-        shift
-        if ! "$@"; then
-            failed=1
-        fi
-    }
-    skip() {
-        echo "--- $1 --- skipped ($2 not found)"
-        skipped+=("$2 (brew install $3)")
-    }
-    run diff git diff --check
-    shopt -s nullglob
-    shell_files=(action.sh .github/scripts/*.sh .githooks/* test/*.sh)
-    python_files=(.github/scripts/*.py)
-    run shell-syntax bash -n "${shell_files[@]}"
-    run python-syntax python3 -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(path).read_text(encoding="utf-8"), filename=path) for path in sys.argv[1:]]' "${python_files[@]}"
-    if command -v shellcheck &>/dev/null; then
-        run shellcheck shellcheck "${shell_files[@]}"
-    else
-        skip shellcheck shellcheck shellcheck
-    fi
-    for test_script in test/*.sh; do
-        run "$(basename "${test_script}")" "${test_script}"
-    done
-    if command -v zizmor &>/dev/null; then
-        run audit zizmor --strict-collection --persona auditor .
-    else
-        skip audit zizmor zizmor
-    fi
-    if command -v pinprick &>/dev/null; then
-        run pinprick-audit pinprick audit .
-    else
-        skip pinprick-audit pinprick pinprick
-    fi
-    if command -v lychee &>/dev/null; then
-        run lychee lychee --config lychee.toml README.md RELEASING.md SECURITY.md
-    else
-        skip lychee lychee lychee
-    fi
-    if [ ${#skipped[@]} -gt 0 ]; then
-        echo ""
-        echo "Checks skipped due to missing tools:"
-        for tool in "${skipped[@]}"; do
-            echo "  - $tool"
-        done
-        failed=1
-    fi
-    exit "$failed"
+    ruby .github/scripts/check.rb
+
+# Install locked repository test dependencies
+setup:
+    bundle install
+
+# Run Ruby release-policy tests
+test:
+    bundle exec ruby -e 'Dir["test/*_test.rb"].sort.each { |file| require File.expand_path(file) }'
 
 # fleet:block audit
 audit:

@@ -5,3 +5,7 @@
 .DS_Store
 .vscode/
 # fleet:end
+
+# Repository test dependencies
+.bundle/
+vendor/bundle/
