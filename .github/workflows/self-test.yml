@@ -31,6 +31,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          bundler-cache: true
+
       - name: Validate action metadata
         run: ruby -e 'require "yaml"; YAML.load_file("action.yml"); puts "action.yml OK"'
 
@@ -63,10 +68,14 @@ jobs:
           puts "README version and pins OK"
           RUBY
 
+      - name: Check Ruby syntax
+        run: |
+          ruby -rrbconfig -e 'Dir[".github/scripts/*.rb", "test/**/*.rb"].sort.each { |file| abort("Invalid Ruby syntax in #{file}") unless system(RbConfig.ruby, "-c", file) }'
+
       - name: Check shell syntax
         run: |
           shopt -s nullglob
-          bash -n action.sh .github/scripts/*.sh test/*.sh
+          for script in action.sh test/*.sh; do bash -n "${script}"; done
 
       - name: ShellCheck
         run: |
@@ -75,13 +84,14 @@ jobs:
             echo "::error::shellcheck is not installed on this runner"
             exit 1
           }
-          shellcheck action.sh .github/scripts/*.sh test/*.sh
+          shellcheck action.sh test/*.sh
 
       - name: Run hermetic tests
         run: |
           for test_script in test/*.sh; do
             "${test_script}"
           done
+          bundle exec ruby -e 'Dir["test/*_test.rb"].sort.each { |file| require File.expand_path(file) }'
 
   # Every runner label README lists as supported. Keep the two in step: a
   # label belongs in one of these matrices or it does not belong in the table.

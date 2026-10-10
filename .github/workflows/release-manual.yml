@@ -29,7 +29,7 @@ defaults:
 jobs:
   release:
     name: Release wrapper changes
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment:
       name: release
@@ -46,7 +46,6 @@ jobs:
           persist-credentials: false
 
       - name: Validate release request
-        id: request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTES: ${{ inputs.notes }}
@@ -92,26 +91,15 @@ jobs:
             fi
           fi
 
-          ENGINE_VERSION=$(python3 - <<'PY'
-          import re
-          from pathlib import Path
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          bundler: none
 
-          action = Path("action.yml").read_text(encoding="utf-8")
-          # Manual wrapper releases intentionally follow action.sh's
-          # stable-version-only input contract.
-          pattern = re.compile(
-              r'(?ms)^inputs:\n(?:(?!^\S).)*?^  version:\n'
-              r'(?:    [^\n]*\n)*?^    default: "'
-              r'((?:0|[1-9][0-9]*)\.'
-              r'(?:0|[1-9][0-9]*)\.'
-              r'(?:0|[1-9][0-9]*))"$'
-          )
-          match = pattern.search(action)
-          if not match:
-              raise SystemExit("could not find a SemVer version default in action.yml")
-          print(match.group(1))
-          PY
-          )
+      - name: Read engine version
+        id: engine
+        run: |
+          ENGINE_VERSION=$(ruby .github/scripts/engine-version.rb)
 
           echo "engine_version=${ENGINE_VERSION}" >> "${GITHUB_OUTPUT}"
 
@@ -120,7 +108,7 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-        run: .github/scripts/wait-for-self-test.sh
+        run: ruby .github/scripts/wait-for-self-test.rb
 
       - name: Mint release token
         id: release-token
@@ -137,7 +125,7 @@ jobs:
         # require a pre-existing tag and reintroduce stranded-tag recovery.
         env:
           COMMIT_SHA: ${{ github.sha }}
-          ENGINE_VERSION: ${{ steps.request.outputs.engine_version }}
+          ENGINE_VERSION: ${{ steps.engine.outputs.engine_version }}
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
           NOTES: ${{ inputs.notes }}
           REPOSITORY: ${{ github.repository }}
