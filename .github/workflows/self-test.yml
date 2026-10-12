@@ -105,11 +105,11 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-latest
           - ubuntu-24.04
+          - ubuntu-26.04
           - ubuntu-slim
           - ubuntu-24.04-arm
-          - macos-latest
+          - ubuntu-26.04-arm
           - macos-15
           - macos-26
     steps:
@@ -147,8 +147,7 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-26.04
-          - ubuntu-26.04-arm
+          - xcode-27
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -161,6 +160,7 @@ jobs:
         with:
           advanced-security: false
           fail-on-findings: false
+          strict-provenance: true
           no-repo-config: true
           path: .
 
