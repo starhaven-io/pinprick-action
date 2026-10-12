@@ -109,15 +109,17 @@ checks for; bump the SHA when you adopt a newer release.
 
 | Runner | Architecture |
 | --- | --- |
-| `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-26.04`, `ubuntu-slim` | Linux x64 |
+| `ubuntu-24.04`, `ubuntu-26.04`, `ubuntu-slim` | Linux x64 |
 | `ubuntu-24.04-arm`, `ubuntu-26.04-arm` | Linux ARM64 |
-| `macos-latest`, `macos-15`, `macos-26` | macOS ARM64 |
+| `macos-15`, `macos-26`, `xcode-27` | macOS ARM64 |
 
-Support is limited to the labels above. The 26.04 preview labels report through
-a self-test job excluded from the required `conclusion` check. Everything else
-is unsupported, including self-hosted runners, containers, and any environment
-with glibc older than 2.39. pinprick publishes no x86_64 macOS or Windows
-build.
+Support is limited to the labels above. The `xcode-27` preview label reports
+through a self-test job excluded from the required `conclusion`
+check. Both stable and preview tests require provenance verification. Floating
+`*-latest` runner aliases are not part of the tested support contract. Everything
+else is unsupported, including self-hosted runners, containers, and any
+environment with glibc older than 2.39. pinprick publishes no x86_64 macOS or
+Windows build.
 
 ## Inputs
 
