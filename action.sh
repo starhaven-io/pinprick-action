@@ -432,6 +432,10 @@ main() {
         "${PINPRICK_BIN}" "${audit_args[@]}" --sarif -- "${PPA_PATH}" > "${sarif_file}"
         exitcode="${?}"
         set -e
+        if (( exitcode > 1 )); then
+            # Partial reports remain diagnostic output, inside the command fence.
+            cat "${sarif_file}" >&2
+        fi
         unfence_engine_output
         # Publish the SARIF path only for clean/findings runs; on an engine
         # error the file holds whatever partial output preceded the failure,

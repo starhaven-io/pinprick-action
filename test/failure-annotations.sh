@@ -355,6 +355,59 @@ expect_sarif_withheld_on_error() {
     echo "ok: engine errors fail without publishing partial SARIF"
 }
 
+expect_success_sarif_stays_out_of_stderr() {
+    local code sarif log="${SANDBOX}/stderr.log"
+    for code in 0 1; do
+        run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="${code}" \
+            PPA_ADVANCED_SECURITY="true"
+        sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+        if [[ "${ACTION_EXITCODE}" -ne 0 || ! -s "${sarif}" ]] \
+            || ! grep -qxF "exit-code=${code}" "${SANDBOX}/output" \
+            || ! grep -qF '::error::forged annotation' "${sarif}" \
+            || grep -qF '::error::forged annotation' "${log}"; then
+            echo "FAIL successful SARIF: engine exit ${code} printed report content to stderr or lost its output" >&2
+            cat "${log}" >&2
+            exit 1
+        fi
+    done
+    echo "ok: clean and findings SARIF stays out of stderr"
+}
+
+expect_error_diagnostics_fenced() {
+    local code token open close err probe occurrence log="${SANDBOX}/stderr.log"
+    for code in 2 137; do
+        run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_AUDIT_EXIT="${code}" \
+            PPA_ADVANCED_SECURITY="true" SHIM_AUDIT_TAIL="incomplete source scan: lib/entry-points.js"
+        token="$(fence_token "${log}")"
+        open="$(command_line_of "::stop-commands::${token}" "${log}")"
+        close="$(command_line_of "::${token}::" "${log}")"
+        err="$(command_line_of "::error::pinprick audit errored with exit code ${code}" "${log}")"
+        if [[ "${ACTION_EXITCODE}" -eq 0 || -z "${open}" || -z "${close}" || -z "${err}" ]] \
+            || (( open >= close || close >= err )) \
+            || ! grep -qxF "exit-code=${code}" "${SANDBOX}/output" \
+            || grep -q '^sarif-file=' "${SANDBOX}/output"; then
+            echo "FAIL error diagnostics: partial SARIF was published or the error outputs were lost" >&2
+            cat "${log}" >&2
+            exit 1
+        fi
+        for probe in 'incomplete source scan: lib/entry-points.js' '::error::forged annotation'; do
+            if ! grep -qF "${probe}" "${log}"; then
+                echo "FAIL error diagnostics: partial SARIF diagnostic was hidden" >&2
+                cat "${log}" >&2
+                exit 1
+            fi
+            while IFS=: read -r occurrence _; do
+                if (( occurrence <= open || occurrence >= close )); then
+                    echo "FAIL error diagnostics: untrusted line ${occurrence} is outside the command fence" >&2
+                    cat "${log}" >&2
+                    exit 1
+                fi
+            done < <(grep -nF "${probe}" "${log}")
+        done
+    done
+    echo "ok: every engine-error diagnostic stays inside the command fence without publishing SARIF"
+}
+
 expect_upload_before_failure() {
     ruby -ryaml -e '
       steps = YAML.load_file(ARGV.fetch(0)).fetch("runs").fetch("steps")
@@ -450,6 +503,8 @@ expect_fence_closed_before_error
 expect_fence_absent_from_sarif
 expect_findings_succeed
 expect_sarif_withheld_on_error
+expect_error_diagnostics_fenced
+expect_success_sarif_stays_out_of_stderr
 expect_upload_before_failure
 
 expect_error "signal-style engine failure" \
