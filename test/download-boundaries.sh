@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# Assert curl transport controls and API-token scoping for release downloads.
+# Assert curl transport controls, API-token scoping and output-file ownership
+# for release downloads, and that the release-metadata parser loads nothing
+# from the scanned workspace.
 
 set -euo pipefail
 
@@ -61,17 +63,24 @@ JSON
 cat > "${SHIMS}/curl" <<'SHIM'
 #!/usr/bin/env bash
 set -euo pipefail
+args=("$@")
 url=""
-for arg in "$@"; do
-    case "${arg}" in
-        https://*) url="${arg}" ;;
+output=""
+while (( $# )); do
+    case "${1}" in
+        -o) output="${2}"; shift ;;
+        https://*) url="${1}" ;;
     esac
+    shift
 done
+if [[ -n "${output}" ]]; then
+    exec > "${output}"
+fi
 if [[ "${url}" == https://api.github.com/* ]]; then
-    printf '%s\n' "$@" > "${SHIM_API_LOG}"
+    printf '%s\n' "${args[@]}" > "${SHIM_API_LOG}"
     cat "${SHIM_METADATA}"
 else
-    printf '%s\n' "$@" > "${SHIM_ASSET_LOG}"
+    printf '%s\n' "${args[@]}" > "${SHIM_ASSET_LOG}"
     cat "${SHIM_ARCHIVE}"
 fi
 SHIM
@@ -92,6 +101,34 @@ exit 1
 SHIM
 chmod +x "${SHIMS}/gh"
 
+# The composite step runs from the scanned checkout. Plant a hostile json.py
+# and an innocent types.py there: the metadata parser must import neither.
+WORKSPACE="${SANDBOX}/workspace"
+mkdir -p "${WORKSPACE}"
+cat > "${WORKSPACE}/json.py" <<'PY'
+import os
+import sys
+
+with open(os.environ["SHIM_IMPORT_MARKER"], "a") as marker:
+    marker.write(__file__ + "\n")
+sys.exit(97)
+PY
+printf 'FOO = 1\n' > "${WORKSPACE}/types.py"
+cd "${WORKSPACE}"
+
+# Control: a parser that trusts the working directory does import the plant.
+# Run it under the action's environment, not the caller's: an inherited
+# PYTHONSAFEPATH would keep the plant off sys.path and fail the control.
+control_exit=0
+env -i PATH="${SHIMS}:/usr/bin:/bin" SHIM_IMPORT_MARKER="${SANDBOX}/imported" \
+    python3 - <<< 'import json' 2>/dev/null \
+    || control_exit="$?"
+if [[ "${control_exit}" -ne 97 || ! -s "${SANDBOX}/imported" ]]; then
+    echo "FAIL workspace isolation: harness control did not import the planted module" >&2
+    exit 1
+fi
+rm -f "${SANDBOX}/imported"
+
 run_action() {
     : > "${SANDBOX}/output"
     exitcode=0
@@ -102,6 +139,7 @@ run_action() {
         RUNNER_ARCH="X64" \
         GITHUB_OUTPUT="${SANDBOX}/output" \
         GITHUB_TOKEN="test-token" \
+        SHIM_IMPORT_MARKER="${SANDBOX}/imported" \
         SHIM_METADATA="${SANDBOX}/metadata.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
         SHIM_API_LOG="${SANDBOX}/api.log" \
@@ -124,6 +162,12 @@ if [[ "${exitcode}" -ne 0 ]]; then
     cat "${SANDBOX}/stdout.log" "${SANDBOX}/stderr.log" >&2
     exit 1
 fi
+
+if [[ -e "${SANDBOX}/imported" ]]; then
+    echo "FAIL workspace isolation: the metadata parser imported $(cat "${SANDBOX}/imported")" >&2
+    exit 1
+fi
+echo "ok: the metadata parser loads nothing from the scanned workspace"
 
 install_dirs=("${SANDBOX}/runner-temp"/pinprick-action.*/99.0.0)
 install_dir="${install_dirs[0]}"
@@ -152,6 +196,17 @@ for log in "${SANDBOX}/api.log" "${SANDBOX}/asset.log"; do
     fi
 done
 echo "ok: API and asset downloads require HTTPS, including redirects"
+
+for expectation in "${SANDBOX}/api.log:release.json" "${SANDBOX}/asset.log:pinprick.tar.gz"; do
+    log="${expectation%%:*}"
+    file="${expectation##*:}"
+    output="$(awk 'previous == "-o" { print; exit } { previous = $0 }' "${log}")"
+    if [[ "${output}" != "${SANDBOX}/runner-temp/"*"/${file}" ]]; then
+        echo "FAIL download boundaries: curl does not own the ${file} output (${log})" >&2
+        exit 1
+    fi
+done
+echo "ok: curl owns the download files, so a retry resets a partial transfer"
 
 grep -qxF "Authorization: Bearer test-token" "${SANDBOX}/api.log" || {
     echo "FAIL download boundaries: API request did not receive the token" >&2

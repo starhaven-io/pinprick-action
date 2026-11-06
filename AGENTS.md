@@ -37,7 +37,8 @@ acknowledgement in `README.md` and `action.sh`.
 - `RELEASING.md`: automated and manual release procedures.
 - `SECURITY.md`: private vulnerability-reporting routes and support policy.
 - `.github/scripts/`: locally tested release-contract and self-test gates.
-- `test/download-boundaries.sh`: hermetic transport and credential-scope checks.
+- `test/download-boundaries.sh`: hermetic transport, credential-scope and
+  workspace-isolation checks for the install step.
 - `test/failure-annotations.sh`: hermetic shim harness asserting that
   action.sh failure paths emit visible `::error` annotations and that the
   exit-code contract and SARIF-before-failure ordering hold.
