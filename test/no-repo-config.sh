@@ -47,11 +47,17 @@ JSON
 cat > "${BIN_DIR}/curl" <<'SHIM'
 #!/usr/bin/env bash
 url=""
-for arg in "$@"; do
-    case "${arg}" in
-        https://*) url="${arg}" ;;
+output=""
+while (( $# )); do
+    case "${1}" in
+        -o) output="${2}"; shift ;;
+        https://*) url="${1}" ;;
     esac
+    shift
 done
+if [[ -n "${output}" ]]; then
+    exec > "${output}"
+fi
 if [[ "${url}" == https://api.github.com/* ]]; then
     cat "${SHIM_METADATA}"
 else

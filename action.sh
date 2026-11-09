@@ -68,6 +68,10 @@ validate_bool() {
 
 github_curl() {
     local url="${1}"
+    local output="${2}"
+    # curl resets a partial transfer before retrying only in an output file
+    # it owns; shell-redirected stdout keeps the partial bytes and receives
+    # the retried response appended to them.
     local args=(
         --proto '=https'
         --proto-redir '=https'
@@ -76,6 +80,7 @@ github_curl() {
         --retry 3
         --retry-delay 1
         -fsSL
+        -o "${output}"
     )
 
     # The REST headers and token belong to api.github.com only; the asset
@@ -110,7 +115,10 @@ parse_release_metadata() {
     local target="${2}"
 
     if have python3; then
-        python3 - "${metadata}" "${target}" <<'PY'
+        # Composite steps run from the scanned checkout, and a script read
+        # from stdin puts that directory first on sys.path. Isolated mode
+        # keeps a json.py or types.py at the repository root out of the parser.
+        python3 -I - "${metadata}" "${target}" <<'PY'
 import json
 import re
 import sys
@@ -348,7 +356,7 @@ install_pinprick() {
     local metadata="${workdir}/release.json"
     local archive="${workdir}/pinprick.tar.gz"
 
-    if ! github_curl "${api_url}" > "${metadata}"; then
+    if ! github_curl "${api_url}" "${metadata}"; then
         die "Could not fetch pinprick release metadata for '${version}'"
     fi
 
@@ -370,7 +378,7 @@ install_pinprick() {
     install_dir="${workdir}/${resolved_version}"
 
     mkdir -p "${install_dir}"
-    if ! github_curl "${download_url}" > "${archive}"; then
+    if ! github_curl "${download_url}" "${archive}"; then
         die "Could not download the pinprick release archive"
     fi
 

@@ -72,13 +72,19 @@ printf '{"tag_name":"v99.0.0","assets":[{"name":"pinprick-99.0.0-x86_64-unknown-
 cat > "${FULL_SHIMS}/curl" <<'SHIM'
 #!/usr/bin/env bash
 url=""
-for arg in "$@"; do
-    case "${arg}" in
-        https://*) url="${arg}" ;;
+output=""
+while (( $# )); do
+    case "${1}" in
+        -o) output="${2}"; shift ;;
+        https://*) url="${1}" ;;
     esac
+    shift
 done
 if [[ -n "${SHIM_CURL_URL_LOG:-}" ]]; then
     printf '%s\n' "${url}" >> "${SHIM_CURL_URL_LOG}"
+fi
+if [[ -n "${output}" ]]; then
+    exec > "${output}"
 fi
 if [[ "${url}" == https://api.github.com/* ]]; then
     cat "${SHIM_METADATA}"
