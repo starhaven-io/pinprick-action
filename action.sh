@@ -53,7 +53,13 @@ have() {
 }
 
 set_output() {
-    printf '%s=%s\n' "${1}" "${2}" >> "${GITHUB_OUTPUT}"
+    local name="${1}" value="${2}" delimiter="PINPRICK_OUTPUT"
+    if [[ "${value}" == *$'\n'* || "${value}" == *$'\r'* ]]; then
+        while [[ "${value}" == *"${delimiter}"* ]]; do delimiter+="_"; done
+        printf '%s<<%s\n%s\n%s\n' "${name}" "${delimiter}" "${value}" "${delimiter}" >> "${GITHUB_OUTPUT}"
+    else
+        printf '%s=%s\n' "${name}" "${value}" >> "${GITHUB_OUTPUT}"
+    fi
 }
 
 validate_bool() {
@@ -411,6 +417,61 @@ install_pinprick() {
     PINPRICK_BIN="${install_dir}/pinprick"
 }
 
+# pinprick emits raw filenames relative to the scan directory. Code scanning
+# decodes artifact URIs and resolves them against the checkout it uploads.
+write_checkout_sarif() {
+    local raw_file="${1}" prefix="${2}"
+    if have python3; then
+        python3 -I - "${raw_file}" "${prefix}" <<'PY'
+import json
+import sys
+from urllib.parse import quote
+
+source, prefix = sys.argv[1:]
+with open(source, encoding="utf-8") as handle:
+    report = json.load(handle)
+for run in report["runs"]:
+    for result in run.get("results", []):
+        for location in result.get("locations", []):
+            artifact = location["physicalLocation"]["artifactLocation"]
+            artifact["uri"] = quote(prefix + artifact["uri"], safe="/!'()*~")
+json.dump(report, sys.stdout, indent=2)
+print()
+PY
+    else
+        node - "${raw_file}" "${prefix}" <<'JS'
+const fs = require("fs");
+const [source, prefix] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(source, "utf8"));
+for (const run of report.runs) {
+  for (const result of run.results || []) {
+    for (const location of result.locations || []) {
+      const artifact = location.physicalLocation.artifactLocation;
+      artifact.uri = (prefix + artifact.uri).split("/").map(encodeURIComponent).join("/");
+    }
+  }
+}
+console.log(JSON.stringify(report, null, 2));
+JS
+    fi
+}
+
+publish_sarif() {
+    local raw_file="${1}" sarif_file="${2}" scan_root checkout_root prefix
+    scan_root="$(CDPATH='' cd -- "${PPA_PATH}" && pwd -P)" || die "Could not resolve the scanned directory"
+    checkout_root="$(git -C "${scan_root}" rev-parse --show-toplevel 2>/dev/null)" || checkout_root="${scan_root}"
+    case "${scan_root}" in
+        "${checkout_root}") prefix="" ;;
+        "${checkout_root%/}/"*) prefix="${scan_root#"${checkout_root%/}/"}/" ;;
+        *) die "The scanned directory is outside the resolved checkout" ;;
+    esac
+    if ! write_checkout_sarif "${raw_file}" "${prefix}" > "${sarif_file}"; then
+        die "Could not prepare pinprick SARIF for the checkout"
+    fi
+    set_output "checkout-path" "${checkout_root}"
+    set_output "sarif-file" "${sarif_file}"
+}
+
 main() {
     validate_bool "advanced-security" "${PPA_ADVANCED_SECURITY}"
     validate_bool "fail-on-findings" "${PPA_FAIL_ON_FINDINGS}"
@@ -420,48 +481,37 @@ main() {
     have curl || die "Cannot install pinprick without curl"
     have tar || die "Cannot install pinprick without tar"
 
-    local target sarif_file exitcode workdir
+    local target raw_sarif workdir exitcode=0
     target="$(target_triple)"
     note debug "resolved runner target ${target}"
 
     workdir="$(mktemp -d "${RUNNER_TEMP%/}/pinprick-action.XXXXXX")" \
         || die "Could not create the pinprick invocation directory"
     install_pinprick "${PPA_VERSION}" "${target}" "${workdir}"
-    sarif_file="${workdir}/pinprick.sarif"
+    raw_sarif="${workdir}/engine.sarif"
 
     local audit_args=(audit)
     if [[ "${PPA_NO_REPO_CONFIG}" == "true" ]]; then
         audit_args+=(--no-repo-config)
     fi
 
+    fence_engine_output
     if [[ "${PPA_ADVANCED_SECURITY}" == "true" ]]; then
-        fence_engine_output
-        set +e
-        "${PINPRICK_BIN}" "${audit_args[@]}" --sarif -- "${PPA_PATH}" > "${sarif_file}"
-        exitcode="${?}"
-        set -e
+        "${PINPRICK_BIN}" "${audit_args[@]}" --sarif -- "${PPA_PATH}" > "${raw_sarif}" || exitcode=$?
         if (( exitcode > 1 )); then
             # Partial reports remain diagnostic output, inside the command fence.
-            cat "${sarif_file}" >&2
-        fi
-        unfence_engine_output
-        # Publish the SARIF path only for clean/findings runs; on an engine
-        # error the file holds whatever partial output preceded the failure,
-        # and a caller using continue-on-error must not upload it.
-        if (( exitcode <= 1 )); then
-            set_output "sarif-file" "${sarif_file}"
+            cat "${raw_sarif}" >&2
         fi
     else
-        fence_engine_output
-        set +e
         # Keep the fence and repository-controlled output on one ordered stream.
-        "${PINPRICK_BIN}" "${audit_args[@]}" -- "${PPA_PATH}" >&2
-        exitcode="${?}"
-        set -e
-        unfence_engine_output
+        "${PINPRICK_BIN}" "${audit_args[@]}" -- "${PPA_PATH}" >&2 || exitcode=$?
     fi
 
     set_output "exit-code" "${exitcode}"
+    if [[ "${PPA_ADVANCED_SECURITY}" == true ]] && (( exitcode <= 1 )); then
+        publish_sarif "${raw_sarif}" "${workdir}/pinprick.sarif"
+    fi
+    unfence_engine_output
     note debug "pinprick exited with code ${exitcode}"
 
     case "${exitcode}" in
