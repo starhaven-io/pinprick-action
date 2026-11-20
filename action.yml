@@ -34,7 +34,7 @@ inputs:
     required: false
     default: "false"
   no-repo-config:
-    description: Ignore the scanned repository's .pinprick.toml and audit with the global config or defaults. Defaults to true so pull requests cannot suppress their own findings; set false only when repository policy is trusted.
+    description: Ignore the scanned repository's .pinprick.toml and audit with the global config or defaults. Defaults to true so pull requests cannot suppress their own findings. This option requires pinprick 0.12.0 or newer. Set false only when repository policy is trusted.
     required: false
     default: "true"
 
