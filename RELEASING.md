@@ -37,8 +37,10 @@ release wrapper changes:
 
 ## After any release
 
-Refresh every SHA-pinned usage example in `README.md` to the new tag's commit in
-an immediate follow-up PR. This is required because `SECURITY.md` supports only
-the latest release. The self-test validates that every documented SHA resolves
-to its trailing tag, but it cannot update a release SHA that does not exist
-until after publication.
+Immediately after publication, refresh the commit SHA and trailing release tag
+in this repository's `README.md` and the engine's `README.md` and
+`site/src/content/docs/getting-started/github-action.md`. Search both repositories
+for `starhaven-io/pinprick-action@` to find any other user-facing examples.
+Open the follow-up PRs in their respective repositories. `SECURITY.md` supports
+only the latest release, and the wrapper's self-test checks that each documented
+SHA in its README resolves to its trailing tag.
