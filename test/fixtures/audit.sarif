@@ -1,0 +1,16 @@
+{
+  "version": "2.1.0",
+  "runs": [{
+    "tool": {"driver": {"name": "pinprick"}},
+    "results": [{
+      "ruleId": "pinprick/container_image_unpinned",
+      "message": {"text": "::error::forged annotation"},
+      "locations": [{
+        "physicalLocation": {
+          "artifactLocation": {"uri": ".github/workflows/build #1%20.yml"},
+          "region": {"startLine": 2}
+        }
+      }]
+    }]
+  }]
+}

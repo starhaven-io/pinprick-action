@@ -26,7 +26,7 @@ if [[ "${1:-}" == "--version" ]]; then
     exit 0
 fi
 if [[ "${1:-}" == "audit" ]]; then
-    printf '%s\n' "${PPA_PATH}"
+    cat "${SHIM_SARIF}"
     exit 0
 fi
 exit 2
@@ -142,6 +142,7 @@ run_action() {
         SHIM_IMPORT_MARKER="${SANDBOX}/imported" \
         SHIM_METADATA="${SANDBOX}/metadata.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
+        SHIM_SARIF="${REPO_ROOT}/test/fixtures/audit.sarif" \
         SHIM_API_LOG="${SANDBOX}/api.log" \
         SHIM_ASSET_LOG="${SANDBOX}/asset.log" \
         PPA_VERSION="99.0.0" \
@@ -155,7 +156,16 @@ run_action() {
         || exitcode="$?"
 }
 
-run_action first-audit
+checkout="nested checkout"
+component="packages/app #1"
+workflow=".github/workflows/build #1%20.yml"
+git init -q "${WORKSPACE}"
+git init -q "${checkout}"
+for path in "." "${checkout}" "${checkout}/${component}"; do
+    mkdir -p "${path}/.github/workflows"
+    printf 'name: fixture\n# %s\n' "${path}" > "${path}/${workflow}"
+done
+run_action "${checkout}"
 
 if [[ "${exitcode}" -ne 0 ]]; then
     echo "FAIL download boundaries: action exited ${exitcode}" >&2
@@ -235,15 +245,59 @@ grep -qxF "https://github.com/starhaven-io/pinprick/releases/download/v99.0.0/pi
 echo "ok: release metadata and archive requests use canonical endpoints"
 
 first_sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
-run_action second-audit
+first_checkout="$(sed -n 's/^checkout-path=//p' "${SANDBOX}/output")"
+run_action "${checkout}/${component}"
 second_sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+second_checkout="$(sed -n 's/^checkout-path=//p' "${SANDBOX}/output")"
 if [[ "${exitcode}" -ne 0 || -z "${first_sarif}" || -z "${second_sarif}" \
     || "${first_sarif}" == "${second_sarif}" ]]; then
     echo "FAIL invocation isolation: separate audits did not produce separate outputs" >&2
     exit 1
 fi
-grep -qxF first-audit "${first_sarif}"
-grep -qxF second-audit "${second_sarif}"
+python3 -I - "${checkout}" "${component}" "${first_sarif}" "${second_sarif}" \
+    "${first_checkout}" "${second_checkout}" <<'PY'
+import json
+import sys
+from pathlib import Path
+from urllib.parse import unquote
+
+checkout, component, first, second, first_root, second_root = sys.argv[1:]
+for sarif, root, prefix in ((first, first_root, ""), (second, second_root, "packages/app%20%231/")):
+    assert Path(root) == Path(checkout).resolve()
+    report = json.loads(Path(sarif).read_text(encoding="utf-8"))
+    location = report["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+    uri = location["artifactLocation"]["uri"]
+    assert uri == prefix + ".github/workflows/build%20%231%2520.yml", uri
+    line = (Path(root) / unquote(uri)).read_text().splitlines()[location["region"]["startLine"] - 1]
+    assert line == "# " + (checkout + "/" + component if prefix else checkout), line
+PY
+echo "ok: nested checkout and component SARIF locations identify the right source line"
 echo "ok: later invocations preserve earlier SARIF outputs"
+
+archive="${SANDBOX}/source archive"
+mkdir -p "${archive}"
+run_action "${archive}"
+[[ "${exitcode}" == 0 ]]
+grep -qxF "checkout-path=$(cd "${archive}" && pwd -P)" "${SANDBOX}/output"
+echo "ok: a source tree without Git metadata uses the scan root"
+
+multiline_checkout=$'checkout\nPINPRICK_OUTPUT\rname'
+git init -q "${multiline_checkout}"
+run_action "${multiline_checkout}"
+[[ "${exitcode}" == 0 ]]
+python3 -I - "${SANDBOX}/output" "${multiline_checkout}" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+output, checkout = map(Path, sys.argv[1:])
+lines = output.read_bytes().split(b"\n")
+marker = lines[1].split(b"<<")
+assert lines[0] == b"exit-code=0" and marker[0] == b"checkout-path" and len(marker) == 2
+end = lines.index(marker[1], 2)
+assert b"\n".join(lines[2:end]) == os.fsencode(checkout.resolve())
+assert lines[end + 1].startswith(b"sarif-file=") and lines[end + 2:] == [b""]
+PY
+echo "ok: checkout paths containing line breaks remain a single runner output"
 
 echo "download boundary behavior holds"

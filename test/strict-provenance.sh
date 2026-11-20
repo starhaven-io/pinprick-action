@@ -18,6 +18,8 @@ cat > "${SANDBOX}/release/pinprick" <<'PINPRICK'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
     echo "pinprick ${SHIM_BINARY_VERSION:-99.0.0}"
+elif [[ "${PPA_ADVANCED_SECURITY}" == true ]]; then
+    cat "${SHIM_SARIF}"
 fi
 exit 0
 PINPRICK
@@ -140,7 +142,7 @@ chmod +x "${FULL_SHIMS}/gh"
 cp "${FULL_SHIMS}/curl" "${NODE_SHIMS}/curl"
 cp "${FULL_SHIMS}/gh" "${NODE_SHIMS}/gh"
 for tool in bash env cat cp rm ln tar gzip gunzip sed awk grep od mkdir mktemp chmod \
-    sleep sha256sum shasum node; do
+    sleep sha256sum shasum node git; do
     tool_path="$(command -v "${tool}" 2>/dev/null)" || continue
     ln -sf "${tool_path}" "${NODE_SHIMS}/${tool}"
 done
@@ -166,6 +168,7 @@ run_action() {
         GITHUB_OUTPUT="${SANDBOX}/output" \
         SHIM_METADATA="${SANDBOX}/metadata.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
+        SHIM_SARIF="${REPO_ROOT}/test/fixtures/audit.sarif" \
         SHIM_GH_MODE="success" \
         SHIM_GH_ARGS_LOG="${SANDBOX}/gh-args" \
         SHIM_CURL_URL_LOG="${SANDBOX}/curl-urls" \
@@ -296,6 +299,29 @@ expect_success "node metadata parser fallback succeeds" \
     PATH="${NODE_SHIMS}" \
     GITHUB_TOKEN="shim-token" \
     PPA_STRICT_PROVENANCE="true"
+
+git init -q "${SANDBOX}/checkout"
+mkdir -p "${SANDBOX}/checkout/sub package"
+expect_success "node SARIF fallback rebases scan-relative filenames" \
+    PATH="${NODE_SHIMS}" \
+    PPA_ADVANCED_SECURITY="true" \
+    PPA_PATH="${SANDBOX}/checkout/sub package"
+sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+cp "${sarif}" "${SANDBOX}/node.sarif"
+expect_success "python SARIF parser rebases the same report" \
+    PPA_ADVANCED_SECURITY="true" \
+    PPA_PATH="${SANDBOX}/checkout/sub package"
+sarif="$(sed -n 's/^sarif-file=//p' "${SANDBOX}/output")"
+python3 -I - "${SANDBOX}/node.sarif" "${sarif}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+node, python = (json.loads(Path(path).read_text(encoding="utf-8")) for path in sys.argv[1:])
+assert node == python
+location = node["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+assert location["artifactLocation"]["uri"] == "sub%20package/.github/workflows/build%20%231%2520.yml"
+PY
 
 for metadata_case in invalid-json invalid-assets prerelease no-digest wrong-url array-tag newline-tag; do
     expect_error "node metadata parser rejects ${metadata_case}" \

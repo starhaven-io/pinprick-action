@@ -126,7 +126,7 @@ Windows build.
 | Input | Default | Description |
 | --- | --- | --- |
 | `version` | `0.34.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.34.0`. |
-| `path` | `.` | Repository path to scan. |
+| `path` | `.` | Directory to scan. Accepts a checkout or a subdirectory of a checkout. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `sarif-category` | `pinprick` | Code scanning category for the upload. Use a unique value for each invocation in the same workflow. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
@@ -151,6 +151,12 @@ the contributor's workflow findings.
 Each invocation keeps its download and SARIF output in a separate runner
 temporary directory, so later invocations preserve earlier `sarif-file` outputs.
 
+File locations in the report are relative to the scanned Git checkout. For
+example, scanning `packages/service` includes that prefix in the report, while
+a repository checked out under `actions/checkout`'s `path` uses its own root.
+For a source directory without Git metadata, the scan directory serves as the root.
+The upload goes to the workflow's repository. The reported commit is the scanned
+checkout's `HEAD`, or the workflow's commit when the directory has no Git metadata.
 ## Permissions
 
 Start workflows with `permissions: {}` and grant permissions only at the job
