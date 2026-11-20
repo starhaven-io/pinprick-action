@@ -269,6 +269,12 @@ version_requires_attestation() {
     return 0
 }
 
+check_config_support() {
+    if [[ "${PPA_NO_REPO_CONFIG}" == true && "${1}" =~ ^0\.([0-9]|1[01])\. ]]; then
+        die "'no-repo-config: true' requires pinprick 0.12.0 or newer (engine ${1})"
+    fi
+}
+
 # Report an unverifiable provenance attestation: fatal under
 # strict-provenance, otherwise a fail-open warning.
 provenance_gap() {
@@ -353,6 +359,7 @@ install_pinprick() {
     if [[ "${version}" == "latest" ]]; then
         api_url="https://api.github.com/repos/starhaven-io/pinprick/releases/latest"
     elif [[ "${version}" =~ ${version_regex} ]]; then
+        check_config_support "${version#v}"
         api_url="https://api.github.com/repos/starhaven-io/pinprick/releases/tags/v${version#v}"
     else
         die "'version' must be 'latest' or an exact X.Y.Z version"
@@ -380,6 +387,9 @@ install_pinprick() {
     fi
     if [[ "${version}" != "latest" && "${resolved_version}" != "${version#v}" ]]; then
         die "Resolved pinprick version ${resolved_version} does not match requested version ${version#v}"
+    fi
+    if [[ "${version}" == "latest" ]]; then
+        check_config_support "${resolved_version}"
     fi
     install_dir="${workdir}/${resolved_version}"
 

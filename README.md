@@ -131,13 +131,14 @@ Windows build.
 | `sarif-category` | `pinprick` | Code scanning category for the upload. Use a unique value for each invocation in the same workflow. |
 | `fail-on-findings` | `false` | Fail the workflow when pinprick reports findings. Internal errors always fail. |
 | `strict-provenance` | `false` | Require provenance verification to run: fail instead of warn when the attestation cannot be checked. |
-| `no-repo-config` | `true` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults, preventing a pull request from suppressing its own findings. |
+| `no-repo-config` | `true` | Ignore the scanned repository's `.pinprick.toml` and audit with the global config or defaults, preventing a pull request from suppressing its own findings. Enabling this option requires pinprick 0.12.0 or newer. |
 
 pinprick supports severity filtering through `.pinprick.toml`, not an
 audit CLI flag, so this action does not expose a `min-severity` input.
 
 Set `no-repo-config: false` only when you deliberately trust and want to apply
-the scanned repository's policy. On pull request workflows, leaving the secure
+the scanned repository's policy. Engines older than 0.12.0 lack this option and
+require `no-repo-config: false`. On pull request workflows, leaving the secure
 default in place prevents a contributor-controlled `.pinprick.toml` from hiding
 the contributor's workflow findings.
 
@@ -150,13 +151,13 @@ the contributor's workflow findings.
 
 Each invocation keeps its download and SARIF output in a separate runner
 temporary directory, so later invocations preserve earlier `sarif-file` outputs.
-
 File locations in the report are relative to the scanned Git checkout. For
 example, scanning `packages/service` includes that prefix in the report, while
 a repository checked out under `actions/checkout`'s `path` uses its own root.
 For a source directory without Git metadata, the scan directory serves as the root.
 The upload goes to the workflow's repository. The reported commit is the scanned
 checkout's `HEAD`, or the workflow's commit when the directory has no Git metadata.
+
 ## Permissions
 
 Start workflows with `permissions: {}` and grant permissions only at the job

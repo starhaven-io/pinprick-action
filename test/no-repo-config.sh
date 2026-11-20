@@ -16,7 +16,7 @@ cat > "${SANDBOX}/release/pinprick" <<'PINPRICK'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" ]]; then
-    echo "pinprick 99.0.0"
+    echo "pinprick ${SHIM_BINARY_VERSION}"
     exit 0
 fi
 printf '%s\n' "$*" > "${SHIM_ARGS_LOG}"
@@ -31,18 +31,21 @@ else
     ARCHIVE_SHA="$(shasum -a 256 "${SANDBOX}/archive.tar.gz" | awk '{ print $1 }')"
 fi
 
-cat > "${SANDBOX}/metadata.json" <<JSON
+write_metadata() {
+    local version="${1}"
+    cat > "${SANDBOX}/metadata.json" <<JSON
 {
-  "tag_name": "v99.0.0",
+  "tag_name": "v${version}",
   "assets": [
     {
-      "name": "pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz",
-      "browser_download_url": "https://github.com/starhaven-io/pinprick/releases/download/v99.0.0/pinprick-99.0.0-x86_64-unknown-linux-gnu.tar.gz",
+      "name": "pinprick-${version}-x86_64-unknown-linux-gnu.tar.gz",
+      "browser_download_url": "https://github.com/starhaven-io/pinprick/releases/download/v${version}/pinprick-${version}-x86_64-unknown-linux-gnu.tar.gz",
       "digest": "sha256:${ARCHIVE_SHA}"
     }
   ]
 }
 JSON
+}
 
 cat > "${BIN_DIR}/curl" <<'SHIM'
 #!/usr/bin/env bash
@@ -67,7 +70,9 @@ SHIM
 chmod +x "${BIN_DIR}/curl"
 
 run_action() {
-    local no_repo_config="${1}"
+    local no_repo_config="${1}" version="${2:-99.0.0}"
+    local resolved="${3:-${version#v}}"
+    write_metadata "${resolved}"
 
     rm -rf "${SANDBOX}/runner-temp"
     mkdir -p "${SANDBOX}/runner-temp"
@@ -85,7 +90,8 @@ run_action() {
         SHIM_METADATA="${SANDBOX}/metadata.json" \
         SHIM_ARCHIVE="${SANDBOX}/archive.tar.gz" \
         SHIM_ARGS_LOG="${SANDBOX}/args" \
-        PPA_VERSION="99.0.0" \
+        SHIM_BINARY_VERSION="${resolved}" \
+        PPA_VERSION="${version}" \
         PPA_PATH="." \
         PPA_ADVANCED_SECURITY="false" \
         PPA_FAIL_ON_FINDINGS="false" \
@@ -131,6 +137,20 @@ exitcode="$(run_action false)"
 grep -qxF "audit -- ." "${SANDBOX}/args" \
     || fail "disabled input changed the audit arguments"
 echo "ok: disabled input is omitted"
+
+for version in v0.11.9 latest; do
+    exitcode="$(run_action true "${version}" 0.11.9)"
+    [[ "${exitcode}" -ne 0 && ! -s "${SANDBOX}/args" ]] || fail "ran unsupported engine ${version}"
+    grep -qF "'no-repo-config: true' requires pinprick 0.12.0 or newer" "${SANDBOX}/stderr.log" \
+        || fail "missing compatibility diagnostic for ${version}"
+done
+exitcode="$(run_action true v0.12.0)"
+[[ "${exitcode}" -eq 0 ]] || fail "first supported engine exited ${exitcode}"
+grep -qxF "audit --no-repo-config -- ." "${SANDBOX}/args" || fail "flag missing at the minimum version"
+exitcode="$(run_action false v0.11.9)"
+[[ "${exitcode}" -eq 0 ]] || fail "deliberate legacy run exited ${exitcode}"
+grep -qxF "audit -- ." "${SANDBOX}/args" || fail "forwarded unsupported flag to legacy engine"
+echo "ok: legacy engines require the explicit trusted-policy input"
 
 exitcode="$(run_action sometimes)"
 [[ "${exitcode}" -ne 0 ]] || fail "invalid input unexpectedly succeeded"
