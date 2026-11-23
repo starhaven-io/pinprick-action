@@ -125,7 +125,7 @@ Windows build.
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `version` | `0.34.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.34.0`. |
+| `version` | `0.35.0` | pinprick version to install, pinned by default for deterministic runs. Use `latest` for the newest, or an exact version like `v0.35.0`. |
 | `path` | `.` | Directory to scan. Accepts a checkout or a subdirectory of a checkout. |
 | `advanced-security` | `true` | Emit SARIF and upload it to GitHub code scanning. |
 | `sarif-category` | `pinprick` | Code scanning category for the upload. Use a unique value for each invocation in the same workflow. |
